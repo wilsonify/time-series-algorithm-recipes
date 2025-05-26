@@ -2,4 +2,5 @@ pyproject.toml
 tsar/tsar.egg-info/PKG-INFO
 tsar/tsar.egg-info/SOURCES.txt
 tsar/tsar.egg-info/dependency_links.txt
+tsar/tsar.egg-info/requires.txt
 tsar/tsar.egg-info/top_level.txt

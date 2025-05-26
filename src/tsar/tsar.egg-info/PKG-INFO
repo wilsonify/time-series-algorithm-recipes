@@ -5,3 +5,9 @@ Summary: Time Series Algorithms Recipes
 Author-email: "A. R. Kulkarni et al." <bookpermissions@springernature.com>
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Provides-Extra: dev
+Requires-Dist: black; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pylint; extra == "dev"

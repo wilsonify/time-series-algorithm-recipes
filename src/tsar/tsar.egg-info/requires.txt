@@ -1,0 +1,7 @@
+pandas
+matplotlib
+
+[dev]
+black
+pytest
+pylint
