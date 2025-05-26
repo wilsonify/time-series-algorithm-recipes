@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: tsar
+Version: 0.1.0
+Summary: Time Series Algorithms Recipes
+Author-email: "A. R. Kulkarni et al." <bookpermissions@springernature.com>
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
