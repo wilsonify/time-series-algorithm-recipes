@@ -11,23 +11,27 @@
 #     language: python
 #     name: python3
 # ---
-
+import os.path
+import pickle
 # %%
 import pandas as pd
 import matplotlib.pyplot as plt
 
+path_to_here = os.path.abspath(os.path.dirname(__file__))
+path_to_data = os.path.abspath(f"{path_to_here}/../../../data/input")
 # %%
-date_parser_fn = lambda dates: pd.datetime.strptime(dates,'%Y-%m')
+date_parser_fn = pd.to_datetime
 
 # %%
-data = pd.read_csv("./data/AirPassengers.csv", parse_dates =['Month'], index_col = 'Month', date_parser = date_parser_fn)
+data = pd.read_csv(f"{path_to_data}/airpassengers.csv", parse_dates=['Month'], index_col='Month',
+                   date_parser=date_parser_fn)
 plt.plot(data)
 plt.show()
 
 # %%
-indian_gdp_data = pd.read_csv('./data/GDPIndia.csv', header=0)
-date_range = pd.date_range(start='1/1/1960', end='31/12/2017',freq='A')
-indian_gdp_data ['TimeIndex'] = pd.DataFrame(date_range,columns=['Year'])
+indian_gdp_data = pd.read_csv(f'{path_to_data}/gdp_india.obj', header=0)
+date_range = pd.date_range(start='1/1/1960', end='31/12/2017', freq='A')
+indian_gdp_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Year'])
 indian_gdp_data.head(5).T
 
 # %%
@@ -37,8 +41,9 @@ plt.show()
 
 # %%
 import pickle
+
 with open('gdp_india.obj', 'wb') as fp:
-     pickle.dump(IndiaGDP, fp)
+    pickle.dump(IndiaGDP, fp)
 ### Retrieve the pickle object
 with open('./data/gdp_india.obj', 'rb') as fp:
     indian_gdp_data1 = pickle.load(fp)
@@ -46,18 +51,18 @@ indian_gdp_data1.head(5).T
 
 # %%
 ### Saving the TS object as csv
-data.to_csv('./data/ts_data.csv', index = True, sep = ',')
+data.to_csv('./data/ts_data.csv', index=True, sep=',')
 ### Check the obj stored
 data1 = pd.read_csv('./data/ts_data.csv')
 ### Check
 data1.head(2)
 
 # %%
-    
+
 
 # %%
 data = pd.read_csv('./data/daily-min-temperatures.csv',
-header = 0, index_col = 0, parse_dates = True, squeeze = True)
+                   header=0, index_col=0, parse_dates=True, squeeze=True)
 print(data.head())
 
 # %%
@@ -68,12 +73,14 @@ plt.show()
 
 # %%
 from datetime import datetime
+
+
 def parse(x):
     return datetime.strptime(x, '%Y %m %d %H')
 
 
 # %%
-data1 = pd.read_csv('./data/raw.csv', parse_dates = [['year','month', 'day', 'hour']],index_col=0, date_parser=parse)
+data1 = pd.read_csv('./data/raw.csv', parse_dates=[['year', 'month', 'day', 'hour']], index_col=0, date_parser=parse)
 
 # %%
 data1.drop('No', axis=1, inplace=True)
@@ -110,18 +117,19 @@ plt.show()
 
 # %%
 def parsing_fn(x):
-    return datetime.strptime('190'+x, '%Y-%m')
+    return datetime.strptime('190' + x, '%Y-%m')
 
 
 # %%
-data = pd.read_csv('./data/shampoo-sales.csv', header=0, parse_dates=[0], index_col=0, squeeze=True, date_parser= parsing_fn)
+data = pd.read_csv('./data/shampoo-sales.csv', header=0, parse_dates=[0], index_col=0, squeeze=True,
+                   date_parser=parsing_fn)
 
 # %%
 data.plot()
 plt.show()
 
 # %%
-data = pd.read_csv('./data/daily-min-temperatures.csv',header = 0, index_col = 0, parse_dates = True, squeeze = True)
+data = pd.read_csv('./data/daily-min-temperatures.csv', header=0, index_col=0, parse_dates=True, squeeze=True)
 
 # %%
 data.plot()
@@ -135,7 +143,7 @@ one_year_ser = data['1990']
 grouped_df = one_year_ser.groupby(pd.Grouper(freq='M'))
 month_df = pd.concat([pd.DataFrame(x[1].values) for x in grouped_df], axis=1)
 month_df = pd.DataFrame(month_df)
-month_df.columns = range(1,13)
+month_df.columns = range(1, 13)
 month_df.boxplot()
 plt.show()
 
@@ -154,10 +162,10 @@ tractor_sales_data = pd.read_csv("./data/tractor_salesSales.csv")
 tractor_sales_data.head(5)
 
 # %%
-date_ser = pd.date_range(start='2003-01-01', freq='MS',periods=len(tractor_sales_data))
+date_ser = pd.date_range(start='2003-01-01', freq='MS', periods=len(tractor_sales_data))
 
 # %%
-tractor_sales_data.rename(columns={'Number of Tractor Sold':'Tractor-Sales'}, inplace=True)
+tractor_sales_data.rename(columns={'Number of Tractor Sold': 'Tractor-Sales'}, inplace=True)
 tractor_sales_data.set_index(date_ser, inplace=True)
 tractor_sales_data = tractor_sales_data[['Tractor-Sales']]
 tractor_sales_data.head(5)
@@ -173,9 +181,9 @@ month_df = pd.DataFrame()
 one_year_ser = tractor_sales_data['2011']
 grouped_ser = one_year_ser.groupby(pd.Grouper(freq='M'))
 month_df = pd.concat([pd.DataFrame(x[1].values) for x in
-grouped_ser], axis=1)
+                      grouped_ser], axis=1)
 month_df = pd.DataFrame(month_df)
-month_df.columns = range(1,13)
+month_df.columns = range(1, 13)
 month_df.boxplot()
 plt.show()
 
@@ -185,8 +193,8 @@ import statsmodels.api as sm
 
 # %%
 turn_over_data = pd.read_csv('./data/RetailTurnover.csv')
-date_range = pd.date_range(start='1/7/1982', end='31/3/1992',freq='Q')
-turn_over_data['TimeIndex'] = pd.DataFrame(date_range,columns=['Quarter'])
+date_range = pd.date_range(start='1/7/1982', end='31/3/1992', freq='Q')
+turn_over_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Quarter'])
 
 # %%
 plt.plot(turn_over_data.TimeIndex, turn_over_data.Turnover)
@@ -207,8 +215,8 @@ residual = decomp_turn_over.resid
 air_passengers_data = pd.read_csv('./data/AirPax.csv')
 
 # %%
-date_range = pd.date_range(start='1/1/1949', end='31/12/1960',freq='M')
-air_passengers_data ['TimeIndex'] = pd.DataFrame(date_range,columns=['Month'])
+date_range = pd.date_range(start='1/1/1949', end='31/12/1960', freq='M')
+air_passengers_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Month'])
 print(air_passengers_data.head())
 
 # %%
@@ -224,11 +232,11 @@ Seasonal_comp.head(4)
 
 # %%
 turn_over_data = pd.read_csv('./data/RetailTurnover.csv')
-date_range = pd.date_range(start='1/7/1982', end='31/3/1992',freq='Q')
-turn_over_data['TimeIndex'] = pd.DataFrame(date_range,columns=['Quarter'])
+date_range = pd.date_range(start='1/7/1982', end='31/3/1992', freq='Q')
+turn_over_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Quarter'])
 
 # %%
-quarterly_turn_over_data = pd.pivot_table(turn_over_data,values = "Turnover", columns = "Quarter", index = "Year")
+quarterly_turn_over_data = pd.pivot_table(turn_over_data, values="Turnover", columns="Quarter", index="Year")
 quarterly_turn_over_data
 
 # %%
