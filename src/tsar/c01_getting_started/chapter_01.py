@@ -18,42 +18,51 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 path_to_here = os.path.abspath(os.path.dirname(__file__))
-path_to_data = os.path.abspath(f"{path_to_here}/../../../data/input")
+path_to_data = os.path.abspath(f"{path_to_here}/../../../data")
 # %%
-date_parser_fn = pd.to_datetime
+
 
 # %%
-data = pd.read_csv(f"{path_to_data}/airpassengers.csv", parse_dates=['Month'], index_col='Month',
-                   date_parser=date_parser_fn)
-plt.plot(data)
+data = pd.read_csv(
+    filepath_or_buffer=f"{path_to_data}/input/airpassengers.csv",
+    parse_dates=['Month'],
+    index_col='Month',
+    date_parser=pd.to_datetime
+)
+
+plt.plot(data, label='Passenger Count')
 plt.show()
 
 # %%
-indian_gdp_data = pd.read_csv(f'{path_to_data}/gdp_india.obj', header=0)
-date_range = pd.date_range(start='1/1/1960', end='31/12/2017', freq='A')
+indian_gdp_data = pd.read_csv(
+    filepath_or_buffer=f'{path_to_data}/input/gdp_india.csv',
+    header=0
+)
+date_range = pd.date_range(start='1/1/1960', end='31/12/2017', freq='YE')
 indian_gdp_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Year'])
 indian_gdp_data.head(5).T
 
 # %%
-plt.plot(indian_gdp_data.TimeIndex, indian_gdp_data.GDPpercapita)
+plt.plot(indian_gdp_data.TimeIndex, indian_gdp_data.GDPpercapita, label="GDPpercapita")
 plt.legend(loc='best')
 plt.show()
 
 # %%
 import pickle
 
-with open('gdp_india.obj', 'wb') as fp:
-    pickle.dump(IndiaGDP, fp)
+with open(f'{path_to_data}/output/gdp_india.obj', 'wb') as fp:
+    pickle.dump(indian_gdp_data, fp)
+
 ### Retrieve the pickle object
-with open('./data/gdp_india.obj', 'rb') as fp:
+with open(f'{path_to_data}/output/gdp_india.obj', 'rb') as fp:
     indian_gdp_data1 = pickle.load(fp)
 indian_gdp_data1.head(5).T
 
 # %%
 ### Saving the TS object as csv
-data.to_csv('./data/ts_data.csv', index=True, sep=',')
+data.to_csv(f'{path_to_data}/output/ts_data.csv', index=True, sep=',')
 ### Check the obj stored
-data1 = pd.read_csv('./data/ts_data.csv')
+data1 = pd.read_csv(f'{path_to_data}/output/ts_data.csv')
 ### Check
 data1.head(2)
 
@@ -61,8 +70,13 @@ data1.head(2)
 
 
 # %%
-data = pd.read_csv('./data/daily-min-temperatures.csv',
-                   header=0, index_col=0, parse_dates=True, squeeze=True)
+data = pd.read_csv(
+    filepath_or_buffer=f'{path_to_data}/input/daily-min-temperatures.csv',
+    header=0,
+    index_col=0,
+    parse_dates=True,
+)
+data = data.iloc[:, 0]  # Assume single-column data
 print(data.head())
 
 # %%
@@ -80,7 +94,8 @@ def parse(x):
 
 
 # %%
-data1 = pd.read_csv('./data/raw.csv', parse_dates=[['year', 'month', 'day', 'hour']], index_col=0, date_parser=parse)
+data1 = pd.read_csv(f'{path_to_data}/input/raw.csv', parse_dates=[['year', 'month', 'day', 'hour']], index_col=0,
+                    date_parser=parse)
 
 # %%
 data1.drop('No', axis=1, inplace=True)
@@ -121,16 +136,24 @@ def parsing_fn(x):
 
 
 # %%
-data = pd.read_csv('./data/shampoo-sales.csv', header=0, parse_dates=[0], index_col=0, squeeze=True,
-                   date_parser=parsing_fn)
+data = pd.read_csv(
+    filepath_or_buffer=f'{path_to_data}/input/shampoo-sales.csv',
+    header=0,
+    parse_dates=[0],
+    index_col=0,
+
+    date_parser=parsing_fn
+)
+data = data.iloc[:, 0]  # Assume single-column data
+
 
 # %%
 data.plot()
 plt.show()
 
 # %%
-data = pd.read_csv('./data/daily-min-temperatures.csv', header=0, index_col=0, parse_dates=True, squeeze=True)
-
+data = pd.read_csv(f'{path_to_data}/input/daily-min-temperatures.csv', header=0, index_col=0, parse_dates=True)
+data = data.iloc[:, 0]
 # %%
 data.plot()
 plt.ylabel('Minimum Temp')
@@ -148,7 +171,7 @@ month_df.boxplot()
 plt.show()
 
 # %%
-grouped_ser = data.groupby(pd.Grouper(freq='A'))
+grouped_ser = data.groupby(pd.Grouper(freq='YE'))
 year_df = pd.DataFrame()
 for name, group in grouped_ser:
     year_df[name.year] = group.values
@@ -158,7 +181,7 @@ plt.show()
 # %%
 
 # %%
-tractor_sales_data = pd.read_csv("./data/tractor_salesSales.csv")
+tractor_sales_data = pd.read_csv(f"{path_to_data}/input/tractor_salessales.csv")
 tractor_sales_data.head(5)
 
 # %%
@@ -167,7 +190,7 @@ date_ser = pd.date_range(start='2003-01-01', freq='MS', periods=len(tractor_sale
 # %%
 tractor_sales_data.rename(columns={'Number of Tractor Sold': 'Tractor-Sales'}, inplace=True)
 tractor_sales_data.set_index(date_ser, inplace=True)
-tractor_sales_data = tractor_sales_data[['Tractor-Sales']]
+tractor_sales_data = tractor_sales_data.loc[:,'Tractor-Sales']
 tractor_sales_data.head(5)
 
 # %%
@@ -231,7 +254,7 @@ Seasonal_comp.head(4)
 # %%
 
 # %%
-turn_over_data = pd.read_csv('./data/RetailTurnover.csv')
+turn_over_data = pd.read_csv(f'{path_to_data}/input/retailturnover.csv')
 date_range = pd.date_range(start='1/7/1982', end='31/3/1992', freq='Q')
 turn_over_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Quarter'])
 
