@@ -1,3 +1,9 @@
+import matplotlib.pyplot as plt
+# %%
+import pandas as pd
+
+from c01_getting_started import path_to_data
+
 # %%
 data = pd.read_csv(f'{path_to_data}/input/daily-min-temperatures.csv', header=0, index_col=0, parse_dates=True)
 data = data.iloc[:, 0]
@@ -26,4 +32,3 @@ year_df.boxplot()
 plt.show()
 
 # %%
-

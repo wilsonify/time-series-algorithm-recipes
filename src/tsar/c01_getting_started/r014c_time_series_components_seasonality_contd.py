@@ -1,3 +1,9 @@
+import matplotlib.pyplot as plt
+# %%
+import pandas as pd
+
+from c01_getting_started import path_to_data
+
 # %%
 tractor_sales_data = pd.read_csv(f"{path_to_data}/input/tractor_salessales.csv")
 tractor_sales_data.head(5)

@@ -1,3 +1,7 @@
+import matplotlib.pyplot as plt
+# %%
+import pandas as pd
+import statsmodels.api as sm
 
 # %%
 air_passengers_data = pd.read_csv('./data/AirPax.csv')
@@ -22,4 +26,3 @@ plt.show()
 # %%
 Seasonal_comp = decomp_air_passengers_data.seasonal
 Seasonal_comp.head(4)
-

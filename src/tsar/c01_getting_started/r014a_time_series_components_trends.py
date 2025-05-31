@@ -1,3 +1,11 @@
+from datetime import datetime
+
+import matplotlib.pyplot as plt
+# %%
+import pandas as pd
+
+from c01_getting_started import path_to_data
+
 
 # %%
 def parsing_fn(x):
@@ -18,4 +26,3 @@ data = data.iloc[:, 0]  # Assume single-column data
 # %%
 data.plot()
 plt.show()
-

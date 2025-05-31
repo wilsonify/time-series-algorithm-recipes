@@ -1,3 +1,8 @@
+import matplotlib.pyplot as plt
+# %%
+import pandas as pd
+
+from c01_getting_started import path_to_data
 
 # %%
 indian_gdp_data = pd.read_csv(

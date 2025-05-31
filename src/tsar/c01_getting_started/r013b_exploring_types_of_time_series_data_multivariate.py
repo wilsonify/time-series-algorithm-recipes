@@ -1,6 +1,11 @@
-
 # %%
 from datetime import datetime
+
+import matplotlib.pyplot as plt
+# %%
+import pandas as pd
+
+from c01_getting_started import path_to_data
 
 
 def parse(x):
@@ -44,6 +49,5 @@ for group in group_list:
     plt.title(data1.columns[group], y=0.5, loc='right')
     i += 1
 plt.show()
-
 
 # %%

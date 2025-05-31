@@ -1,11 +1,10 @@
-import os.path
 
 import matplotlib.pyplot as plt
 # %%
 import pandas as pd
 
-path_to_here = os.path.abspath(os.path.dirname(__file__))
-path_to_data = os.path.abspath(f"{path_to_here}/../../../data")
+from c01_getting_started import path_to_data
+
 # %%
 
 
