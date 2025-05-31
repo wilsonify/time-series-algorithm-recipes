@@ -1,21 +1,8 @@
-# ---
-# jupyter:
-#   jupytext:
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.17.1
-#   kernelspec:
-#     display_name: Python 3 (ipykernel)
-#     language: python
-#     name: python3
-# ---
 import os.path
-import pickle
+
+import matplotlib.pyplot as plt
 # %%
 import pandas as pd
-import matplotlib.pyplot as plt
 
 path_to_here = os.path.abspath(os.path.dirname(__file__))
 path_to_data = os.path.abspath(f"{path_to_here}/../../../data")
@@ -43,7 +30,7 @@ indian_gdp_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Year'])
 indian_gdp_data.head(5).T
 
 # %%
-plt.plot(indian_gdp_data.TimeIndex, indian_gdp_data.GDPpercapita, label="GDPpercapita")
+plt.plot(indian_gdp_data.TimeIndex, indian_gdp_data.GDPpercapita, label="GDPerCapita")
 plt.legend(loc='best')
 plt.show()
 
@@ -51,6 +38,7 @@ plt.show()
 import pickle
 
 with open(f'{path_to_data}/output/gdp_india.obj', 'wb') as fp:
+    # noinspection PyTypeChecker
     pickle.dump(indian_gdp_data, fp)
 
 ### Retrieve the pickle object
@@ -94,8 +82,12 @@ def parse(x):
 
 
 # %%
-data1 = pd.read_csv(f'{path_to_data}/input/raw.csv', parse_dates=[['year', 'month', 'day', 'hour']], index_col=0,
-                    date_parser=parse)
+data1 = pd.read_csv(
+    filepath_or_buffer=f'{path_to_data}/input/raw.csv',
+    parse_dates=['year', 'month', 'day', 'hour'],
+    index_col=0,
+    date_parser=parse
+)
 
 # %%
 data1.drop('No', axis=1, inplace=True)
@@ -146,7 +138,6 @@ data = pd.read_csv(
 )
 data = data.iloc[:, 0]  # Assume single-column data
 
-
 # %%
 data.plot()
 plt.show()
@@ -161,7 +152,7 @@ plt.title('Min temp in Southern Hemisphere from 1981 to 1990')
 plt.show()
 
 # %%
-month_df = pd.DataFrame()
+
 one_year_ser = data['1990']
 grouped_df = one_year_ser.groupby(pd.Grouper(freq='M'))
 month_df = pd.concat([pd.DataFrame(x[1].values) for x in grouped_df], axis=1)
@@ -190,7 +181,7 @@ date_ser = pd.date_range(start='2003-01-01', freq='MS', periods=len(tractor_sale
 # %%
 tractor_sales_data.rename(columns={'Number of Tractor Sold': 'Tractor-Sales'}, inplace=True)
 tractor_sales_data.set_index(date_ser, inplace=True)
-tractor_sales_data = tractor_sales_data.loc[:,'Tractor-Sales']
+tractor_sales_data = tractor_sales_data.loc[:, 'Tractor-Sales']
 tractor_sales_data.head(5)
 
 # %%
@@ -200,18 +191,16 @@ plt.title("Tractor Sales from 2003 to 2014")
 plt.show()
 
 # %%
-month_df = pd.DataFrame()
+
 one_year_ser = tractor_sales_data['2011']
 grouped_ser = one_year_ser.groupby(pd.Grouper(freq='M'))
-month_df = pd.concat([pd.DataFrame(x[1].values) for x in
-                      grouped_ser], axis=1)
+month_df = pd.concat([pd.DataFrame(x[1].values) for x in grouped_ser], axis=1)
 month_df = pd.DataFrame(month_df)
 month_df.columns = range(1, 13)
 month_df.boxplot()
 plt.show()
 
 # %%
-from statsmodels.tsa.seasonal import seasonal_decompose
 import statsmodels.api as sm
 
 # %%
@@ -225,7 +214,7 @@ plt.legend(loc='best')
 plt.show()
 
 # %%
-decomp_turn_over = sm.tsa.seasonal_decompose(turn_over_data.Turnover, model="additive", freq=4)
+decomp_turn_over = sm.tsa.seasonal_decompose(turn_over_data.Turnover, model="additive", period=4)
 decomp_turn_over.plot()
 plt.show()
 
@@ -243,7 +232,14 @@ air_passengers_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Month'])
 print(air_passengers_data.head())
 
 # %%
-decomp_air_passengers_data = sm.tsa.seasonal_decompose(air_passengers_data.Passenger, model="multiplicative", freq=12)
+decomp_air_passengers_data = sm.tsa.seasonal_decompose(
+    x=air_passengers_data.Passenger,
+    model="multiplicative",
+    filt=None,
+    period=12,  # Use this instead of `freq`
+    two_sided=True,
+    extrapolate_trend=0
+)
 decomp_air_passengers_data.plot()
 plt.show()
 
