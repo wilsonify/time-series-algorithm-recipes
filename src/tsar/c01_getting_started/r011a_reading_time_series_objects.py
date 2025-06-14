@@ -1,5 +1,5 @@
 # airpassengers_analysis.py
-
+from io import StringIO
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ import pandas as pd
 from c01_getting_started import path_to_data
 
 
-def load_airpassenger_data(csv_path: str) -> pd.DataFrame:
+def load_airpassenger_data(csv_path: str|StringIO) -> pd.DataFrame:
     """Load AirPassengers dataset from a CSV file."""
     return pd.read_csv(
         filepath_or_buffer=csv_path,

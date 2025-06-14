@@ -7,6 +7,8 @@ from c01_getting_started import path_to_data, save_pickle, load_pickle
 from c01_getting_started.r011a_reading_time_series_objects import load_airpassenger_data, plot_passenger_data
 from c01_getting_started.r011b_reading_time_series_objects import plot_gdp, add_time_index
 from c01_getting_started.r012_saving_time_series_objects import reload_time_series_from_csv, save_time_series_to_csv
+from c01_getting_started.r013a_exploring_types_of_time_series_data_univariate import plot_temperature_series, \
+    extract_series_column, load_temperature_data
 
 
 def test_load_airpassenger_data():
@@ -99,3 +101,32 @@ def test_save_and_reload_csv_roundtrip():
     # Check content (not index — reloaded CSV doesn't parse dates)
     assert df_reloaded.shape == (2, 2)
     assert list(df_reloaded.columns) == ["Month", "Passengers"]
+
+
+def test_load_temperature_data():
+    df = load_temperature_data(StringIO("""Date,Temp
+1981-01-01,20.7
+1981-01-02,17.9
+1981-01-03,18.8
+"""))
+    assert isinstance(df.index[0], pd.Timestamp)
+    assert "Temp" in df.columns
+    assert df.shape == (3, 1)
+
+
+def test_extract_series_column_returns_series():
+    df = load_temperature_data(StringIO("""Date,Temp
+    1981-01-01,20.7
+    1981-01-02,17.9
+    1981-01-03,18.8
+    """))
+
+    series = extract_series_column(df)
+    assert isinstance(series, pd.Series)
+    assert series.name == "Temp"
+    assert series.index.equals(df.index)
+
+
+def test_plot_temperature_series_executes():
+    series = pd.Series([20.7, 17.9, 18.8], index=pd.date_range("1981-01-01", periods=3))
+    plot_temperature_series(series, show=False)
