@@ -1,31 +1,32 @@
+from pathlib import Path
+from typing import Union
+
 import matplotlib.pyplot as plt
-# %%
 import pandas as pd
 
-from c01_getting_started import path_to_data
 
-# %%
-indian_gdp_data = pd.read_csv(
-    filepath_or_buffer=f'{path_to_data}/input/gdp_india.csv',
-    header=0
-)
-date_range = pd.date_range(start='1/1/1960', end='31/12/2017', freq='YE')
-indian_gdp_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Year'])
-indian_gdp_data.head(5).T
+def load_gdp_data(csv_path: Union[str, Path]) -> pd.DataFrame:
+    """Load GDP data from CSV."""
+    return pd.read_csv(csv_path, header=0)
 
-# %%
-plt.plot(indian_gdp_data.TimeIndex, indian_gdp_data.GDPpercapita, label="GDPerCapita")
-plt.legend(loc='best')
-plt.show()
 
-# %%
-import pickle
+def add_time_index(df: pd.DataFrame, start_year: str = '1960', end_year: str = '2017') -> pd.DataFrame:
+    """Add a yearly time index to the GDP dataframe."""
+    date_range = pd.date_range(start=f'1/1/{start_year}', end=f'31/12/{end_year}', freq='YE')
+    df = df.copy()
+    df['TimeIndex'] = date_range
+    return df
 
-with open(f'{path_to_data}/output/gdp_india.obj', 'wb') as fp:
-    # noinspection PyTypeChecker
-    pickle.dump(indian_gdp_data, fp)
 
-### Retrieve the pickle object
-with open(f'{path_to_data}/output/gdp_india.obj', 'rb') as fp:
-    indian_gdp_data1 = pickle.load(fp)
-indian_gdp_data1.head(5).T
+def plot_gdp(df: pd.DataFrame, x_col: str = 'TimeIndex', y_col: str = 'GDPpercapita',show=True) -> None:
+    """Plot GDP per capita over time."""
+    plt.figure(figsize=(10, 5))
+    plt.plot(df[x_col], df[y_col], label="GDP per Capita")
+    plt.title("India GDP per Capita Over Time")
+    plt.xlabel("Year")
+    plt.ylabel("GDP per Capita")
+    plt.legend(loc='best')
+    plt.grid(True)
+    plt.tight_layout()
+    if show:
+        plt.show()
