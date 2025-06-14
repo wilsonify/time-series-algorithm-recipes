@@ -1,19 +1,23 @@
 import pandas as pd
+from pathlib import Path
+from typing import Union
 
-from c01_getting_started import path_to_data
 
-# %%
-data = pd.read_csv(
-    filepath_or_buffer=f"{path_to_data}/input/airpassengers.csv",
-    parse_dates=['Month'],
-    index_col='Month',
-    date_parser=pd.to_datetime
-)
-# %%
-### Saving the TS object as csv
-data.to_csv(f'{path_to_data}/output/ts_data.csv', index=True, sep=',')
-### Check the obj stored
-data1 = pd.read_csv(f'{path_to_data}/output/ts_data.csv')
-### Check
-data1.head(2)
-# %%
+def load_airpassenger_data(csv_path: Union[str, Path]) -> pd.DataFrame:
+    """Load AirPassengers data from a CSV file with proper date parsing."""
+    return pd.read_csv(
+        filepath_or_buffer=csv_path,
+        parse_dates=['Month'],
+        index_col='Month',
+        date_parser=pd.to_datetime
+    )
+
+
+def save_time_series_to_csv(data: pd.DataFrame, csv_path: Union[str, Path]) -> None:
+    """Save time series DataFrame to CSV."""
+    data.to_csv(csv_path, index=True, sep=',')
+
+
+def reload_time_series_from_csv(csv_path: Union[str, Path]) -> pd.DataFrame:
+    """Reload time series DataFrame from CSV."""
+    return pd.read_csv(csv_path)
