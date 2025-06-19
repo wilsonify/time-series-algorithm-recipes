@@ -6,7 +6,7 @@ authors = [{ name = "A. R. Kulkarni et al.", email = "bookpermissions@springerna
 license = { file = "LICENSE.txt" }
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["pandas", "matplotlib" ]
+dependencies = ["pandas", "matplotlib", "scikit-learn", "seaborn"]
 
 [project.optional-dependencies]
 dev = [
