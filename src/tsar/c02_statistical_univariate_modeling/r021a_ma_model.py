@@ -1,4 +1,6 @@
+import json
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -61,6 +63,28 @@ class MAModelFMU:
         self.history = None
         self.initial_obs = None
         self.current_time = 0
+
+    def save(self, filepath):
+        """
+        Save model weights and last p observations for future predictions.
+        """
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, 'w') as f:
+            json.dump({
+                "window": self.window,
+                "history": self.history,
+                "initial_obs": self.initial_obs,
+                "current_time": self.current_time
+            }, f)
+
+    def load(self, filepath):
+        with open(filepath, 'r') as f:
+            model_data = json.load(f)
+            self.window = model_data["window"]
+            self.initial_obs = model_data["initial_obs"]
+            self.history = model_data["history"]
+            self.current_time = model_data["current_time"]
+            self.create(window=model_data["window"], last_obs=model_data["last_obs"])
 
 
 def plot_gdp_ma(us_gdp_data, show=True):
