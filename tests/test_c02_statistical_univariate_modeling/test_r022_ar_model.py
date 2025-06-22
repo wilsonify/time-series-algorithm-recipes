@@ -1,4 +1,5 @@
 import json
+from collections import deque  # <-- add this
 from pathlib import Path
 
 import numpy as np
@@ -13,11 +14,11 @@ from c01_getting_started import path_to_data
 
 class ARModelFMU:
     def __init__(self):
-        self.params = None  # model weights
-        self.lags = None  # list of lag indices
-        self.initial_obs = None  # initial lagged values
-        self.history = []  # buffer for current state
-        self.current_time = 0  # simulation time step
+        self.params = None
+        self.lags = None
+        self.initial_obs = None
+        self.history = None  # will be deque
+        self.current_time = 0
 
     def fit(self, train_series):
         model_ar = AutoReg(train_series, lags=8).fit()
@@ -25,52 +26,43 @@ class ARModelFMU:
         endog = model_ar.model.endog.tolist()
         self.params = model_ar.params.tolist()
         self.lags = model_ar.model.ar_lags
-        self.last_obs = endog[-max(model_ar.model.ar_lags):]
-        self.history = list(endog)
+        self.last_obs = endog[-max(self.lags):]
+        self.history = deque(endog[-max(self.lags):], maxlen=max(self.lags))
+
+    def read(self):
+        print(f"params = {self.params}")
+        print(f"lags = {self.lags}")
+        print(f"initial_obs = {self.initial_obs}")
+        print(f"history = {self.history}")
+        print(f"current_time = {self.current_time}")
 
     def create(self, params, lags, last_obs):
-        """Initialize the model from saved state."""
         self.params = np.array(params)
         self.lags = lags
         self.initial_obs = list(last_obs)
-        self.history = list(last_obs)
+        self.history = deque(last_obs, maxlen=max(lags))
         self.current_time = 0
 
-    def read(self):
-        """Return the current observable state (last prediction)."""
-        if len(self.history) == 0:
-            return None
-        return self.history[-1]
-
     def update(self, value):
-        """Externally inject a new value (e.g. measurement override)."""
         self.history.append(value)
 
     def delete(self):
-        """Clean up the model."""
         self.params = None
         self.lags = None
         self.initial_obs = None
-        self.history = []
+        self.history = None
         self.current_time = 0
 
     def do_step(self, step_size=1):
-        """
-        Simulate the next `step_size` predictions.
-
-        Returns:
-            np.ndarray: Array of predicted values.
-        """
         preds = []
-        history = self.history.copy()
+        history = deque(self.history, maxlen=self.history.maxlen)
 
         for _ in range(step_size):
             if len(history) < len(self.lags):
                 raise ValueError("Insufficient history to perform prediction.")
 
-            lagged_vals = history[-len(self.lags):][::-1]
-            yhat = self.params[0]  # intercept
-            yhat += np.dot(self.params[1:], lagged_vals)
+            lagged_vals = list(history)[-len(self.lags):][::-1]
+            yhat = self.params[0] + np.dot(self.params[1:], lagged_vals)
             preds.append(yhat)
             history.append(yhat)
 
@@ -79,8 +71,7 @@ class ARModelFMU:
         return np.array(preds)
 
     def reset(self):
-        """Reset the model to its initial state."""
-        self.history = list(self.initial_obs)
+        self.history = deque(self.initial_obs, maxlen=max(self.lags))
         self.current_time = 0
 
     def save(self, filepath):
@@ -141,8 +132,10 @@ def test_r022_ar_model():
     test_df, train_df, eval_df = train_test_split_consumption(data)
     model_ar = ARModelFMU()
     model_ar.fit(train_df)
+    model_ar.read()
     model_ar.save(f"{path_to_data}/output/model_ar.json")
     model_ar2 = ARModelFMU()
     model_ar2.load(f"{path_to_data}/output/model_ar.json")
+    model_ar2.read()
     plot_predictions_ar_model(data, model_ar2, test_df, show=False)
     plot_predictions_ar_model(data, model_ar2, eval_df, show=False)
