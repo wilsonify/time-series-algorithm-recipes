@@ -26,6 +26,7 @@ class ARModelFMU:
         self.params = model_ar.params.tolist()
         self.lags = model_ar.model.ar_lags
         self.last_obs = endog[-max(model_ar.model.ar_lags):]
+        self.history = list(endog)
 
     def create(self, params, lags, last_obs):
         """Initialize the model from saved state."""
@@ -97,12 +98,10 @@ class ARModelFMU:
     def load(self, filepath):
         with open(filepath, 'r') as f:
             model_data = json.load(f)
-
-        return LightweightARModelFMU().create(
-            params=model_data["params"],
-            lags=model_data["lags"],
-            last_obs=model_data["last_obs"]
-        )
+            self.params = model_data["params"]
+            self.lags = model_data["lags"]
+            self.last_obs = model_data["last_obs"]
+            self.create(self.params, self.lags, self.last_obs)  # <-- important
 
 
 def plot_predictions_ar_model(data, model_ar, test_df, show=True):
