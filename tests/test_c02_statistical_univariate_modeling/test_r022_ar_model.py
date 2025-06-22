@@ -1,6 +1,11 @@
 from c01_getting_started import path_to_data
-from c02_statistical_univariate_modeling.r022_ar_model import ARModelFMU, plot_predictions_ar_model, \
-    train_test_split_consumption, plot_opsd_germany_daily_pacf, read_opsd_germany_daily
+from c02_statistical_univariate_modeling.r022_ar_model import (
+    ARModelFMU,
+    plot_predictions_ar_model,
+    train_test_split_consumption,
+    plot_opsd_germany_daily_pacf,
+    read_opsd_germany_daily
+)
 
 
 def test_r022_ar_model():
