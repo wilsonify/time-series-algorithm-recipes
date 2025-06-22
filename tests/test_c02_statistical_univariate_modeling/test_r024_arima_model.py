@@ -4,53 +4,53 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import acf, pacf
+from statsmodels.tsa.stattools import adfuller
 
 from c01_getting_started import path_to_data
 
-# %%
-
-# %%
-btc_data = pd.read_csv(f"{path_to_data}/input/btc.csv")
-print(btc_data.head())
-
-# %%
-btc_data.index = pd.to_datetime(btc_data['Date'],
-                                format='%Y-%m-%d')
-del btc_data['Date']
-
-# %%
-plt.ylabel('Price-BTC')
-plt.xlabel('Date')
-plt.xticks(rotation=45)
-plt.plot(btc_data.index, btc_data['BTC-USD'], )
-
-# %%
-train_data = btc_data[btc_data.index < pd.to_datetime("2020-11-01", format='%Y-%m-%d')]
-test_data = btc_data[btc_data.index > pd.to_datetime("2020-11-01", format='%Y-%m-%d')]
-print(train_data.shape)
-print(test_data.shape)
-
-# %%
-plt.plot(train_data, color="black", label='Train')
-plt.plot(test_data, color="green", label='Test')
-plt.ylabel('Price-BTC')
-plt.xlabel('Date')
-plt.xticks(rotation=35)
-plt.title("Train/Test split")
-plt.show()
-
-# %%
-actuals = train_data['BTC-USD']
-
-ts_diff = actuals - actuals.shift(periods=4)
-ts_diff.dropna(inplace=True)
-
-# %%
-# checking for stationarity
-from statsmodels.tsa.stattools import adfuller
-
 
 def test_r024_arima_model():
+    # %%
+
+    # %%
+    btc_data = pd.read_csv(f"{path_to_data}/input/btc.csv")
+    print(btc_data.head())
+
+    # %%
+    btc_data.index = pd.to_datetime(btc_data['Date'],
+                                    format='%Y-%m-%d')
+    del btc_data['Date']
+
+    # %%
+    plt.ylabel('Price-BTC')
+    plt.xlabel('Date')
+    plt.xticks(rotation=45)
+    plt.plot(btc_data.index, btc_data['BTC-USD'], )
+
+    # %%
+    train_data = btc_data[btc_data.index < pd.to_datetime("2020-11-01", format='%Y-%m-%d')]
+    test_data = btc_data[btc_data.index > pd.to_datetime("2020-11-01", format='%Y-%m-%d')]
+    print(train_data.shape)
+    print(test_data.shape)
+
+    # %%
+    plt.plot(train_data, color="black", label='Train')
+    plt.plot(test_data, color="green", label='Test')
+    plt.ylabel('Price-BTC')
+    plt.xlabel('Date')
+    plt.xticks(rotation=35)
+    plt.title("Train/Test split")
+    plt.show()
+
+    # %%
+    actuals = train_data['BTC-USD']
+
+    ts_diff = actuals - actuals.shift(periods=4)
+    ts_diff.dropna(inplace=True)
+
+    # %%
+    # checking for stationarity
+
     result = adfuller(ts_diff)
     pval = result[1]
     print('ADF Statistic: %f' % result[0])
