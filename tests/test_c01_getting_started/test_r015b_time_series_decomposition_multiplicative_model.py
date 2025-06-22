@@ -1,28 +1,12 @@
-import matplotlib.pyplot as plt
-# %%
-import pandas as pd
-import statsmodels.api as sm
-
-# %%
-air_passengers_data = pd.read_csv('./data/AirPax.csv')
-
-# %%
-date_range = pd.date_range(start='1/1/1949', end='31/12/1960', freq='M')
-air_passengers_data['TimeIndex'] = pd.DataFrame(date_range, columns=['Month'])
-print(air_passengers_data.head())
-
-# %%
-decomp_air_passengers_data = sm.tsa.seasonal_decompose(
-    x=air_passengers_data.Passenger,
-    model="multiplicative",
-    filt=None,
-    period=12,  # Use this instead of `freq`
-    two_sided=True,
-    extrapolate_trend=0
+from c01_getting_started import path_to_data
+from c01_getting_started.r015b_time_series_decomposition_multiplicative_model import (
+    plot_decomp_air_passengers,
+    read_air_passengers_data
 )
-decomp_air_passengers_data.plot()
-plt.show()
 
-# %%
-Seasonal_comp = decomp_air_passengers_data.seasonal
-Seasonal_comp.head(4)
+
+def test_r015b_time_series_decomposition_multiplicative_model():
+    air_passengers_data = read_air_passengers_data(f'{path_to_data}/input/airpax.csv')
+    assert air_passengers_data.shape == (144, 4)
+    decomp_air_passengers_data = plot_decomp_air_passengers(air_passengers_data, show=False)
+    assert decomp_air_passengers_data.seasonal.shape == (144,)
