@@ -11,3 +11,4 @@ def test_test_r012_saving_time_series_objects():
     )
     df2 = load_airpassenger_data(f"{path_to_data}/output/airpassengers.csv")
     assert df1.shape == df2.shape
+    assert list(set(df1.columns)) == list(set(df2.columns))
