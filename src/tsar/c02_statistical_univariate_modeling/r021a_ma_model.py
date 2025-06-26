@@ -6,6 +6,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from statsmodels.tsa.ar_model import AutoReg
 
 from c01_getting_started import path_to_data
 
@@ -27,14 +28,59 @@ class MAModelFMU:
         self.history: deque = deque([0, 0])
         self.current_time: int = 0
         self.initialized: bool = False
+        self.params: List[float] = [0]
+        self.lags: int = -1
+        self.selected_trend: str = "ct"
 
     def create(self, window: int, obs: List[float]):
-        """Initialize the model with a fixed-size window and past observations."""
+        """Initialize the model with a fixed-size window and fit a linear model of obs ~ mvg_avg.
+        | Trend  | Equation                                                              | `params` mapping |
+        | ------ | --------------------------------------------------------------------- | ---------------- |
+        | `'n'`  | $\hat{y} = \beta_1 \cdot \text{mvg\_avg}$                             | `[β₁]`           |
+        | `'c'`  | $\hat{y} = \beta_0 + \beta_1 \cdot \text{mvg\_avg}$                   | `[β₀, β₁]`       |
+        | `'t'`  | $\hat{y} = \beta_1 \cdot \text{mvg\_avg} + \beta_2 \cdot t$           | `[β₁, β₂]`       |
+        | `'ct'` | $\hat{y} = \beta_0 + \beta_1 \cdot \text{mvg\_avg} + \beta_2 \cdot t$ | `[β₀, β₁, β₂]`   |
+        """
         assert window > 0, "Window size must be positive."
+        assert len(obs) > 0, f"Need at least 1 observations."
+
+        # Compute moving average
+        mvg_avg = pd.Series(obs).rolling(
+            window=window,
+            min_periods=1,
+            center=True
+        ).mean().ffill().bfill().to_list()
+
+        # Fit multiple models with different trends
+        trends = ['n', 'c', 't', 'ct']
+        models = {}
+        bics = {}
+
+        for trend in trends:
+            try:
+                model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend=trend).fit()
+                models[trend] = model
+                bics[trend] = model.bic
+                print(f"Trend='{trend}' BIC={model.bic:.2f}")
+            except Exception as e:
+                print(f"Trend='{trend}' failed: {e}")
+                continue
+
+        # Choose the trend with the lowest BIC
+        best_trend = min(bics, key=bics.get)
+        best_model = models[best_trend]
+
+        print(f"\nSelected model with trend='{best_trend}' (BIC={bics[best_trend]:.2f})")
+        print(best_model.summary())
+
+        # Save model state
         self.window = window
         self.history = deque(list(obs), maxlen=window)
         self.initial_obs = self.history[0]
         self.last_obs = self.history[-1]
+        self.params = best_model.params.tolist()
+        self.selected_trend = best_trend
+        self.lags = 0
         self.current_time = 0
         self.initialized = True
 
@@ -58,14 +104,38 @@ class MAModelFMU:
         self.history.append(value)
 
     def do_step(self) -> float:
-        """Take exactly one step. Return the next predicted value."""
+        """Take exactly one step using the fitted linear model. Return the next predicted value."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
-        yhat = float(np.mean(self.history))
-        self.history.append(yhat)
-        self.current_time += 1
-        return yhat
 
-    def simulate(self, nsteps: int = 100) -> np.ndarray:
+        # Compute moving average of current history
+        mvg_avg = np.mean(self.history)
+
+        trend = self.selected_trend
+        params = self.params
+        t = self.current_time  # time trend
+
+        # Apply the fitted model according to selected trend
+        if trend == 'n':
+            yhat = params[0] * mvg_avg
+
+        elif trend == 'c':
+            yhat = params[0] + params[1] * mvg_avg
+
+        elif trend == 't':
+            yhat = params[0] * mvg_avg + params[1] * t
+
+        elif trend == 'ct':
+            yhat = params[0] + params[1] * mvg_avg + params[2] * t
+
+        else:
+            raise ValueError(f"Unknown trend type: {trend}")
+
+        # Update model state
+        #self.history.append(yhat)
+        self.current_time += 1
+        return float(yhat)
+
+    def simulate(self, nsteps: int = 10) -> np.ndarray:
         """Simulate forward n steps using repeated do_step."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
         predictions = np.empty(nsteps)
@@ -80,23 +150,37 @@ class MAModelFMU:
         self.current_time = 0
 
     def save(self, filepath: str):
-        """Persist model state to a JSON file."""
+        """Persist full model state to a JSON file."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, 'w') as f:
             json.dump({
                 "window": self.window,
+                "initial_obs": self.initial_obs,
+                "last_obs": self.last_obs,
                 "history": list(self.history),
                 "current_time": self.current_time,
-                "initialized": self.initialized
+                "initialized": self.initialized,
+                "params": self.params,
+                "selected_trend": self.selected_trend,
+                "lags": self.lags
+
             }, f)
 
     def load(self, filepath: str):
-        """Load model state from a JSON file."""
+        """Load full model state from a JSON file."""
         with open(filepath, 'r') as f:
             model_data = json.load(f)
-        self.create(window=model_data["window"], obs=model_data["history"])
-        self.current_time = model_data.get("current_time", 0)
+
+        self.window = model_data["window"]
+        self.initial_obs = model_data["initial_obs"]
+        self.last_obs = model_data["last_obs"]
+        self.history = deque(model_data["history"], maxlen=self.window)
+        self.current_time = model_data["current_time"]
+        self.initialized = model_data["initialized"]
+        self.params = model_data["params"]
+        self.lags = model_data["lags"]
+        self.selected_trend = model_data["selected_trend"]
 
 
 # === Plotting & Utilities === #
@@ -134,12 +218,45 @@ def read_us_gdp_data(filepath_or_buffer: str) -> pd.DataFrame:
     return us_gdp_data
 
 
-def plot_predictions_ma_model(model_ma: MAModelFMU, test_df: pd.Series, show=True):
-    """Plot predictions versus ground truth for a given model."""
-    predictions = model_ma.simulate(len(test_df))
+def plot_predictions_ma_model(model_ma: MAModelFMU, series: pd.Series, nsteps: int = 5, show=True):
+    """
+    Plot predictions at the end of the actual series.
+
+    Parameters:
+        model_ma: A fitted MAModelFMU instance.
+        series: The actual data as a Series.
+        nsteps: Number of steps to simulate into the future.
+        show: Whether to immediately show the plot.
+    """
+    mvg_avg = series.rolling(
+        window=model_ma.window,
+        min_periods=1,
+        center=True
+    ).mean().ffill().bfill()
+
+    predictions = model_ma.simulate(nsteps)
+    predictions_index = list(range(len(series.index), len(series.index) + nsteps))
+    predictions_series = pd.Series(predictions, index=predictions_index)
+
+    # Extend x-axis with future indices
     plt.figure(figsize=(10, 4))
-    plt.plot(test_df.reset_index(drop=True), label="Actual")
-    plt.plot(predictions, label="Predicted", linestyle="--")
+
+    x1 = list(series.index)
+    y1 = list(series.values)
+    plt.plot(x1, y1, label="Actual", color='blue')
+
+    x2 = list(mvg_avg.index)
+    y2 = list(mvg_avg.values)
+    plt.plot(x2, y2, label="mvg_avg", color='black')
+
+    x3 = predictions_series.index
+    y3 = predictions_series.values
+    plt.plot(x3, y3, label="Predicted", linestyle="--", color='orange')
+
+    plt.axvline(len(series) - 1, color='gray', linestyle=':', label='Forecast Start')
+    plt.title("Forecast at End of Series")
+    plt.xlabel("Time Step")
+    plt.ylabel("Value")
     plt.legend()
     plt.grid(True)
     if show: plt.show()
