@@ -11,10 +11,6 @@ from statsmodels.tsa.ar_model import AutoReg
 from c01_getting_started import path_to_data
 
 
-class ModelStateError(Exception):
-    """Raised when the model is used before initialization."""
-
-
 class MAModelFMU:
     """
     A strict Moving Average forecasting model.
@@ -30,16 +26,12 @@ class MAModelFMU:
         self.initialized: bool = False
         self.params: List[float] = [0]
         self.lags: int = -1
-        self.selected_trend: str = "ct"
 
     def create(self, window: int, obs: List[float]):
-        """Initialize the model with a fixed-size window and fit a linear model of obs ~ mvg_avg.
-        | Trend  | Equation                                                              | `params` mapping |
-        | ------ | --------------------------------------------------------------------- | ---------------- |
-        | `'n'`  | $\hat{y} = \beta_1 \cdot \text{mvg\_avg}$                             | `[β₁]`           |
-        | `'c'`  | $\hat{y} = \beta_0 + \beta_1 \cdot \text{mvg\_avg}$                   | `[β₀, β₁]`       |
-        | `'t'`  | $\hat{y} = \beta_1 \cdot \text{mvg\_avg} + \beta_2 \cdot t$           | `[β₁, β₂]`       |
-        | `'ct'` | $\hat{y} = \beta_0 + \beta_1 \cdot \text{mvg\_avg} + \beta_2 \cdot t$ | `[β₀, β₁, β₂]`   |
+        """
+        Initialize the model with a fixed-size window and fit a linear model of obs ~ mvg_avg.
+        equation: $\hat{y} = \beta_0 + \beta_1 \cdot t$ + \beta_2 \cdot \text{mvg\_avg}
+        params:  [β₀, β₁, β₂]
         """
         assert window > 0, "Window size must be positive."
         assert len(obs) > 0, f"Need at least 1 observations."
@@ -51,50 +43,11 @@ class MAModelFMU:
             center=True
         ).mean().ffill().bfill().to_list()
 
-        # Fit multiple models with different trends
-        models = {}
-        bics = {}
-
-        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='n').fit()
-        models['n'] = model
-        bics['n'] = model.bic
-        print(f"Trend=n BIC={model.bic:.2f}")
-
-        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='c').fit()
-        models['c'] = model
-        bics['c'] = model.bic
-        print(f"Trend=c BIC={model.bic:.2f}")
-
-        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='t').fit()
-        models['t'] = model
-        bics['t'] = model.bic
-        print(f"Trend=t BIC={model.bic:.2f}")
-
         model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='ct').fit()
-        models['ct'] = model
-        bics['ct'] = model.bic
-        print(f"Trend=ct BIC={model.bic:.2f}")
-
-        # Choose the trend with the lowest BIC
-        best_trend = min(bics, key=bics.get)
-        best_model = models[best_trend]
-        best_params = best_model.params.tolist()
-        print(f"\nSelected model with trend='{best_trend}' (BIC={bics[best_trend]:.2f})")
-        print(best_model.summary())
-
-        if best_trend == 'n':
-            self.params = [0.0, best_params[0], 0.0]
-
-        elif best_trend == 'c':
-            self.params = [best_params[0], best_params[1], 0.0]
-
-        elif best_trend == 't':
-            self.params = [0.0, best_params[0], best_params[1]]
-
-        elif best_trend == 'ct':
-            self.params = best_params
+        print(model.summary())
 
         # Save model state
+        self.params = model.params.tolist()
         self.window = window
         self.history = deque(list(obs), maxlen=window)
         self.initial_obs = self.history[0]
@@ -107,7 +60,7 @@ class MAModelFMU:
         """A convenience method to fit from a pandas Series."""
         self.create(
             window=window,
-            obs=series.dropna().iloc[-window:].tolist()
+            obs=series.tolist()
         )
 
     def read(self):
@@ -145,8 +98,8 @@ class MAModelFMU:
         x_mat = np.column_stack([np.ones(n), mvg_avg, t])
 
         # Ridge Regression: (XᵀX + λI)β = Xᵀy
-        I = np.eye(x_mat.shape[1])
-        beta_opt = np.linalg.inv(x_mat.T @ x_mat + lambda_reg * I) @ x_mat.T @ y
+        identity = np.eye(x_mat.shape[1])
+        beta_opt = np.linalg.inv(x_mat.T @ x_mat + lambda_reg * identity) @ x_mat.T @ y
 
         # Move params slightly toward regularized estimate
         self.params = [
@@ -159,24 +112,23 @@ class MAModelFMU:
     def do_step(self) -> float:
         """Take exactly one step using the fitted linear model. Return the next predicted value."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
-
-        # Compute moving average of current history
+        print(f"current_time={self.current_time}")
         mvg_avg = np.mean(self.history)
-
-        params = self.params
-        t = self.current_time  # time trend
-
-        # Apply the model
-        yhat = params[0] + params[1] * mvg_avg + params[2] * t
-
-        # Update model state
-        # self.history.append(yhat)
+        print(f"mvg_avg={mvg_avg}")
+        yhat = self.params[0] + self.params[1] * self.current_time + self.params[2] * float(mvg_avg)
+        print(f"yhat={yhat}")
         self.current_time += 1
         return float(yhat)
 
-    def simulate(self, nsteps: int = 10) -> np.ndarray:
+    def simulate(self, nsteps: int = 10, start_time=None, start_obs=None) -> np.ndarray:
         """Simulate forward n steps using repeated do_step."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
+        # Use provided overrides or default to internal state
+        if start_time is not None:
+            self.current_time = start_time
+        if start_obs is not None:
+            self.last_obs = start_obs
+
         predictions = np.empty(nsteps)
         for i in range(nsteps):
             predictions[i] = self.do_step()
@@ -185,8 +137,8 @@ class MAModelFMU:
     def reset(self):
         """Reset the model to its original state."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
-        self.history = deque([self.initial_obs], maxlen=self.window)
         self.current_time = 0
+        self.last_obs = self.initial_obs
 
     def save(self, filepath: str):
         """Persist full model state to a JSON file."""
@@ -236,7 +188,11 @@ def plot_gdp(us_gdp_data: pd.DataFrame, title: str = "US GDP Over Time", show: b
 
 def plot_gdp_ma(us_gdp_data: pd.DataFrame, window: int = 5, show: bool = True):
     """Plot GDP with moving average overlay."""
-    mvg_avg = us_gdp_data["GDP"].rolling(window=window).mean()
+    mvg_avg = us_gdp_data["GDP"].rolling(
+        window=window,
+        min_periods=1,
+        center=True
+    ).mean().ffill().bfill().interpolate()
     plt.figure(figsize=(10, 4))
     plt.plot(us_gdp_data["TimeIndex"], us_gdp_data["GDP"], label='US GDP')
     plt.plot(us_gdp_data["TimeIndex"], mvg_avg, label=f'MA({window}) Forecast')
@@ -269,9 +225,13 @@ def plot_predictions_ma_model(model_ma: MAModelFMU, series: pd.Series, nsteps: i
         window=model_ma.window,
         min_periods=1,
         center=True
-    ).mean().ffill().bfill()
+    ).mean().ffill().bfill().interpolate()
 
-    predictions = model_ma.simulate(nsteps)
+    predictions = model_ma.simulate(
+        nsteps=nsteps,
+        start_time=series.index[-1],
+        start_obs=series.iloc[-1]
+    )
     predictions_index = list(range(len(series.index), len(series.index) + nsteps))
     predictions_series = pd.Series(predictions, index=predictions_index)
 
@@ -279,7 +239,7 @@ def plot_predictions_ma_model(model_ma: MAModelFMU, series: pd.Series, nsteps: i
     plt.figure(figsize=(10, 4))
 
     x1 = list(series.index)
-    y1 = list(series.values)
+    y1 = series.to_list()
     plt.plot(x1, y1, label="Actual", color='blue')
 
     x2 = list(mvg_avg.index)
