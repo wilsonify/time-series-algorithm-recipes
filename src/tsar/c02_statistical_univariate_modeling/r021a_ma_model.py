@@ -251,25 +251,26 @@ def plot_predictions_ma_model(model_ma: MAModelFMU, series: pd.Series, nsteps: i
 
     # Extend x-axis with future indices
     plt.figure(figsize=(10, 4))
-
-    x1 = list(series.index)
-    y1 = series.to_list()
-    plt.plot(x1, y1, label="Actual", color='blue')
-
-    x2 = list(mvg_avg.index)
-    y2 = list(mvg_avg.values)
-    plt.plot(x2, y2, label="mvg_avg", color='black')
-
-    x3 = predictions_series.index
-    y3 = predictions_series.values
-    plt.plot(x3, y3, label="Predicted", linestyle="--", color='orange')
-
+    sns.lineplot(
+        x=series.index,
+        y=series.values,
+        label="Actual"
+    )
+    sns.lineplot(
+        x=mvg_avg.index,
+        y=mvg_avg.values,
+        label="mvg_avg"
+    )
+    sns.lineplot(
+        x=predictions_series.index,
+        y=predictions_series.values,
+        label="Predicted"
+    )
     plt.axvline(len(series) - 1, color='gray', linestyle=':', label='Forecast Start')
     plt.title("Forecast at End of Series")
     plt.xlabel("Time Step")
     plt.ylabel("Value")
     plt.legend()
-    plt.grid(True)
     if show: plt.show()
 
 
