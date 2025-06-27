@@ -52,34 +52,53 @@ class MAModelFMU:
         ).mean().ffill().bfill().to_list()
 
         # Fit multiple models with different trends
-        trends = ['n', 'c', 't', 'ct']
         models = {}
         bics = {}
 
-        for trend in trends:
-            try:
-                model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend=trend).fit()
-                models[trend] = model
-                bics[trend] = model.bic
-                print(f"Trend='{trend}' BIC={model.bic:.2f}")
-            except Exception as e:
-                print(f"Trend='{trend}' failed: {e}")
-                continue
+        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='n').fit()
+        models['n'] = model
+        bics['n'] = model.bic
+        print(f"Trend=n BIC={model.bic:.2f}")
+
+        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='c').fit()
+        models['c'] = model
+        bics['c'] = model.bic
+        print(f"Trend=c BIC={model.bic:.2f}")
+
+        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='t').fit()
+        models['t'] = model
+        bics['t'] = model.bic
+        print(f"Trend=t BIC={model.bic:.2f}")
+
+        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='ct').fit()
+        models['ct'] = model
+        bics['ct'] = model.bic
+        print(f"Trend=ct BIC={model.bic:.2f}")
 
         # Choose the trend with the lowest BIC
         best_trend = min(bics, key=bics.get)
         best_model = models[best_trend]
-
+        best_params = best_model.params.tolist()
         print(f"\nSelected model with trend='{best_trend}' (BIC={bics[best_trend]:.2f})")
         print(best_model.summary())
+
+        if best_trend == 'n':
+            self.params = [0.0, best_params[0], 0.0]
+
+        elif best_trend == 'c':
+            self.params = [best_params[0], best_params[1], 0.0]
+
+        elif best_trend == 't':
+            self.params = [0.0, best_params[0], best_params[1]]
+
+        elif best_trend == 'ct':
+            self.params = best_params
 
         # Save model state
         self.window = window
         self.history = deque(list(obs), maxlen=window)
         self.initial_obs = self.history[0]
         self.last_obs = self.history[-1]
-        self.params = best_model.params.tolist()
-        self.selected_trend = best_trend
         self.lags = 0
         self.current_time = 0
         self.initialized = True
@@ -98,10 +117,44 @@ class MAModelFMU:
         print(f"Initial Observations  : {self.initial_obs}")
         print(f"Current Time Step     : {self.current_time}")
 
-    def update(self, value: float):
-        """Append a new observation to the history."""
+    def update(self, values: List[float], alpha: float = 0.1, lambda_reg: float = 1.0):
+        """
+        Append new observation and take a small L2-regularized gradient step toward MLE estimate.
+
+        Parameters:
+            value : float
+                The new observation.
+            alpha : float
+                Step size (learning rate) toward new optimal parameters.
+            lambda_reg : float
+                L2 regularization strength.
+        """
         assert self.initialized, "Model must be initialized using `create` or `fit`."
-        self.history.append(value)
+        self.history.append(values)
+        self.last_obs = self.history[-1]
+
+        # construct features (X matrix)
+        y = np.array(self.history)
+        n = len(y)
+        t = np.arange(n)
+        mvg_avg = pd.Series(y).rolling(
+            window=self.window,
+            min_periods=1,
+            center=True
+        ).mean().ffill().bfill().to_numpy()
+        x_mat = np.column_stack([np.ones(n), mvg_avg, t])
+
+        # Ridge Regression: (XᵀX + λI)β = Xᵀy
+        I = np.eye(x_mat.shape[1])
+        beta_opt = np.linalg.inv(x_mat.T @ x_mat + lambda_reg * I) @ x_mat.T @ y
+
+        # Move params slightly toward regularized estimate
+        self.params = [
+            (1 - alpha) * p_old + alpha * p_new
+            for p_old, p_new in zip(self.params, beta_opt)
+        ]
+
+        self.current_time = 0
 
     def do_step(self) -> float:
         """Take exactly one step using the fitted linear model. Return the next predicted value."""
@@ -110,28 +163,14 @@ class MAModelFMU:
         # Compute moving average of current history
         mvg_avg = np.mean(self.history)
 
-        trend = self.selected_trend
         params = self.params
         t = self.current_time  # time trend
 
-        # Apply the fitted model according to selected trend
-        if trend == 'n':
-            yhat = params[0] * mvg_avg
-
-        elif trend == 'c':
-            yhat = params[0] + params[1] * mvg_avg
-
-        elif trend == 't':
-            yhat = params[0] * mvg_avg + params[1] * t
-
-        elif trend == 'ct':
-            yhat = params[0] + params[1] * mvg_avg + params[2] * t
-
-        else:
-            raise ValueError(f"Unknown trend type: {trend}")
+        # Apply the model
+        yhat = params[0] + params[1] * mvg_avg + params[2] * t
 
         # Update model state
-        #self.history.append(yhat)
+        # self.history.append(yhat)
         self.current_time += 1
         return float(yhat)
 
@@ -162,7 +201,6 @@ class MAModelFMU:
                 "current_time": self.current_time,
                 "initialized": self.initialized,
                 "params": self.params,
-                "selected_trend": self.selected_trend,
                 "lags": self.lags
 
             }, f)
@@ -180,7 +218,6 @@ class MAModelFMU:
         self.initialized = model_data["initialized"]
         self.params = model_data["params"]
         self.lags = model_data["lags"]
-        self.selected_trend = model_data["selected_trend"]
 
 
 # === Plotting & Utilities === #
