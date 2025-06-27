@@ -1,1 +1,20 @@
-{"window": 5, "initial_obs": 4718.6, "last_obs": 4835.0, "history": [4718.6, 4784.6, 4739.2, 4822.3, 4835.0], "current_time": 0, "initialized": true, "params": [13.976831347014809, 0.9917260274777289], "selected_trend": "t", "lags": 0}
+{
+  "window": 5,
+  "initial_obs": 4718.6,
+  "last_obs": 4835.0,
+  "history": [
+    4718.6,
+    4784.6,
+    4739.2,
+    4822.3,
+    4835.0
+  ],
+  "current_time": 0,
+  "initialized": true,
+  "params": [
+    13.976831347014809,
+    0.9917260274777289
+  ],
+  "selected_trend": "t",
+  "lags": 0
+}
