@@ -5,6 +5,7 @@ from typing import List
 
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from matplotlib import pyplot as plt
 from statsmodels.tsa.ar_model import AutoReg
 
@@ -112,11 +113,8 @@ class MAModelFMU:
     def do_step(self) -> float:
         """Take exactly one step using the fitted linear model. Return the next predicted value."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
-        print(f"current_time={self.current_time}")
         mvg_avg = np.mean(self.history)
-        print(f"mvg_avg={mvg_avg}")
         yhat = self.params[0] + self.params[1] * self.current_time + self.params[2] * float(mvg_avg)
-        print(f"yhat={yhat}")
         self.current_time += 1
         return float(yhat)
 
@@ -177,13 +175,19 @@ class MAModelFMU:
 def plot_gdp(us_gdp_data: pd.DataFrame, title: str = "US GDP Over Time", show: bool = True):
     """Plot raw GDP data."""
     plt.figure(figsize=(10, 4))
-    plt.plot(us_gdp_data["TimeIndex"], us_gdp_data["GDP"], label='US GDP')
+    sns.lineplot(
+        x="TimeIndex",
+        y="GDP",
+        data=us_gdp_data,
+        label="US GDP"
+    )
     plt.title(title)
     plt.xlabel("Year")
     plt.ylabel("GDP")
     plt.legend(loc='best')
-    plt.grid(True)
-    if show: plt.show()
+
+    if show:
+        plt.show()
 
 
 def plot_gdp_ma(us_gdp_data: pd.DataFrame, window: int = 5, show: bool = True):
@@ -193,14 +197,24 @@ def plot_gdp_ma(us_gdp_data: pd.DataFrame, window: int = 5, show: bool = True):
         min_periods=1,
         center=True
     ).mean().ffill().bfill().interpolate()
+    us_gdp_data["mvg_avg"] = mvg_avg
     plt.figure(figsize=(10, 4))
-    plt.plot(us_gdp_data["TimeIndex"], us_gdp_data["GDP"], label='US GDP')
-    plt.plot(us_gdp_data["TimeIndex"], mvg_avg, label=f'MA({window}) Forecast')
+    sns.lineplot(
+        x="TimeIndex",
+        y="GDP",
+        data=us_gdp_data,
+        label="US GDP"
+    )
+    sns.lineplot(
+        x="TimeIndex",
+        y="mvg_avg",
+        data=us_gdp_data,
+        label="US GDP mvg_avg"
+    )
     plt.title(f"US GDP with MA({window})")
     plt.xlabel("Year")
     plt.ylabel("GDP")
     plt.legend(loc='best')
-    plt.grid(True)
     if show: plt.show()
 
 
