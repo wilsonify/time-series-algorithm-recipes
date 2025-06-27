@@ -122,8 +122,8 @@ class MAModelFMU:
         Append new observation and take a small L2-regularized gradient step toward MLE estimate.
 
         Parameters:
-            value : float
-                The new observation.
+            values : List[float]
+                The new observations.
             alpha : float
                 Step size (learning rate) toward new optimal parameters.
             lambda_reg : float
