@@ -90,6 +90,8 @@ class MAModelFMU:
         self.history.extend(values)
         self.last_obs = self.history[-1]
         # construct features (X matrix)
+        print(f"self.history = {self.history}")
+        print(f"list(self.history) = {list(self.history)}")
         y = np.array(list(self.history))
         n = len(y)
         t = np.arange(n)
