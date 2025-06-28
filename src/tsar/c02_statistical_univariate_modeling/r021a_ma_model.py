@@ -284,11 +284,10 @@ class MAModelTracker:
 
     def update_plot(self, df):
         """Update animation frame (still uses matplotlib)."""
-        self.scat = sns.scatterplot(
-            x='Year', y='GDP', data=df, ax=self.ax0, color='blue', s=30
-        ).collections[0]
-        self.line, = self.ax0.plot(df['Longitude_float'], df['Latitude_float'], linestyle='-', color='blue')
-        self.artists_list.append([self.scat, self.line])
+        scat = self.ax0.scatter(df['Year'], df['GDP'], color='blue', s=20)
+        line0, = self.ax0.plot(df['Year'], df['GDP'], label="GDP", color='black')
+        line1, = self.ax0.plot(df['Year'], df['GDP_MA'], label="Moving Avg", color='green')
+        self.artists_list.append([scat, line0, line1])
 
     def animate(self, df, output_path):
         """
@@ -298,8 +297,8 @@ class MAModelTracker:
         df (pd.DataFrame): The DataFrame containing hurricane data.
         output_path (str): The path to save the animation.
         """
-        df['timestamp'] = pd.to_datetime(df["timestamp"])
-        df = df.sort_values('timestamp')
+        df['Year'] = pd.to_datetime(df["Year"])
+        df = df.sort_values('Year')
         for frame in range(len(df)):
             current_df = df.iloc[:frame + 1]
             self.update_plot(current_df)
@@ -339,3 +338,4 @@ def test_demo():
     ).mean().ffill().bfill().interpolate()
     tracker = MAModelTracker()
     tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
+    tracker.animate(df.head(10), f"{path_to_data}/output/ma_model_tracker.gif")
