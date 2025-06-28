@@ -14,13 +14,6 @@ from statsmodels.tsa.ar_model import AutoReg
 from c01_getting_started import path_to_data
 
 
-def read_us_gdp_data(filepath_or_buffer: str) -> pd.DataFrame:
-    """Load GDP data and assign a time index."""
-    us_gdp_data = pd.read_csv(filepath_or_buffer)
-    us_gdp_data['TimeIndex'] = pd.date_range(start='1929', periods=len(us_gdp_data), freq='A')
-    return us_gdp_data
-
-
 class MAModelFMU:
     """
     A strict Moving Average forecasting model.
@@ -59,6 +52,7 @@ class MAModelFMU:
         # Save model state
         self.params = model.params.tolist()
         self.window = window
+        print(f"obs = {obs}")
         self.history = deque(list(obs), maxlen=window)
         self.initial_obs = self.history[0]
         self.last_obs = self.history[-1]
@@ -93,11 +87,10 @@ class MAModelFMU:
                 L2 regularization strength.
         """
         assert self.initialized, "Model must be initialized using `create` or `fit`."
-        self.history.append(values)
+        self.history.extend(values)
         self.last_obs = self.history[-1]
-
         # construct features (X matrix)
-        y = np.array(self.history)
+        y = np.array(list(self.history))
         n = len(y)
         t = np.arange(n)
         mvg_avg = pd.Series(y).rolling(
@@ -193,6 +186,8 @@ class MAModelTracker:
         self.scat = self.ax0.scatter([], [], color='black', label="GDP")
         self.line = self.ax0.plot([], [], linestyle='-', color='blue', label="GDP_MA")
         self.forecast_line = self.ax0.plot([], [], linestyle='-', marker='o', color='grey', label="forecast")
+        self.ax0.set_xlabel("Year")
+        self.ax0.set_ylabel("GDP")
         self.artists_list = []
         self.MA: MAModelFMU = MAModelFMU()
 
@@ -291,26 +286,25 @@ class MAModelTracker:
         df (pd.DataFrame): The DataFrame containing hurricane data.
         output_path (str): The path to save the animation.
         """
-        df['Year'] = pd.to_datetime(df["Year"])
-        df = df.sort_values('Year')
+        self.MA.fit(df["GDP"].head(5))
         artists_list = []
         for frame in range(4, len(df)):
             current_df = df.iloc[:frame + 1]
-            scat = self.ax0.scatter(current_df['Year'], current_df['GDP'], color='black', s=20)
-            line0, = self.ax0.plot(current_df['Year'], current_df['GDP_MA'], color='blue')
-            self.MA.fit(current_df["GDP"])
+            self.MA.update(current_df["GDP"].tolist())
+            current_dp = current_df.tail(1)
             nsteps = 5
             predictions = self.MA.simulate(
                 nsteps=nsteps,
-                start_time=current_df["GDP"].index[-1],
-                start_obs=current_df["GDP"].iloc[-1]
+                start_time=current_dp["GDP"].index[-1],
+                start_obs=current_dp["GDP"].iloc[-1]
             )
-            start_forecast = current_df["Year"].iloc[-1]
-            pred_index = [start_forecast + pd.DateOffset(years=i) for i in range(1, nsteps + 1)]
-            pred_series = pd.Series(predictions, index=pred_index)
-            line1, = self.ax0.plot(pred_series.index, pred_series.values, color='blue')
+            scat = self.ax0.scatter(current_df['TimeIndex'], current_df['GDP'], color='black')
+            line0, = self.ax0.plot(current_df['TimeIndex'], current_df['GDP_MA'], color='blue')
+            line1, = self.ax0.plot([current_dp["TimeIndex"] + pd.DateOffset(years=i) for i in range(0, nsteps)],
+                                   predictions, color='blue')
             artists_list.append([scat, line0, line1])
         self.ax0.legend()
+
         anim = ArtistAnimation(self.fig, artists_list, interval=200, blit=True)
         anim.save(output_path)
 
@@ -322,8 +316,6 @@ class MAModelTracker:
         df (pd.DataFrame): The DataFrame containing hurricane data.
         output_path (str): The path to save the plot.
         """
-        df['Year'] = pd.to_datetime(df["Year"])
-        df = df.sort_values('Year')
         self.plot_actuals(df, self.ax0)
         self.plot_moving_average(df, self.ax0)
         model_ma = MAModelFMU()
@@ -338,13 +330,21 @@ class MAModelTracker:
         plt.savefig(output_path)
 
 
-def test_demo():
-    df = read_us_gdp_data(f"{path_to_data}/input/gdpus.csv")
-    df['GDP_MA'] = df["GDP"].rolling(
+def read_us_gdp_data(filepath_or_buffer: str) -> pd.DataFrame:
+    """Load GDP data and assign a time index."""
+    us_gdp_data = pd.read_csv(filepath_or_buffer)
+    us_gdp_data['TimeIndex'] = pd.to_datetime(us_gdp_data["Year"], format="%Y")
+    us_gdp_data = us_gdp_data.sort_values('TimeIndex')
+    us_gdp_data['GDP_MA'] = us_gdp_data["GDP"].rolling(
         window=5,
         min_periods=1,
         center=True
     ).mean().ffill().bfill().interpolate()
+    return us_gdp_data
+
+
+def test_demo():
+    df = read_us_gdp_data(f"{path_to_data}/input/gdpus.csv")
     tracker = MAModelTracker()
     # tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
-    tracker.animate(df.head(10), f"{path_to_data}/output/ma_model_tracker.gif")
+    tracker.animate(df.head(25), f"{path_to_data}/output/ma_model_tracker.gif")
