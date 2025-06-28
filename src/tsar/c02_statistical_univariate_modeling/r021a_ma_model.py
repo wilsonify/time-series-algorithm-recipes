@@ -274,24 +274,3 @@ def plot_predictions_ma_model(model_ma: MAModelFMU, series: pd.Series, nsteps: i
     if show: plt.show()
 
 
-def test_r021a_ma_model():
-    """Quick test for plotting and model structure."""
-    data = read_us_gdp_data(f'{path_to_data}/input/gdpus.csv')
-    gdp_series = data["GDP"].dropna()
-
-    # Initialize and save model
-    model_ma = MAModelFMU()
-    model_ma.fit(gdp_series)
-    model_ma.read()
-    model_ma.save(f"{path_to_data}/output/model_ma.json")
-
-    # Load and test new model instance
-    model_ma2 = MAModelFMU()
-    model_ma2.load(f"{path_to_data}/output/model_ma.json")
-    model_ma2.read()
-
-    # Visual tests
-    plot_gdp(data)
-    plot_predictions_ma_model(model_ma, gdp_series)
-    plot_predictions_ma_model(model_ma2, gdp_series)
-    plot_gdp_ma(data)
