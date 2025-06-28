@@ -44,7 +44,7 @@ class MAModelFMU:
         params:  [β₀, β₁, β₂]
         """
         assert window > 0, "Window size must be positive."
-        assert len(obs) > 0, f"Need at least 1 observations."
+        assert len(obs) > 2, f"Need at least 1 observations."
 
         # Compute moving average
         mvg_avg = pd.Series(obs).rolling(
@@ -190,10 +190,11 @@ class MAModelTracker:
         self.fig = plt.figure(figsize=(15, 10))
         self.gs = GridSpec(1, 1, height_ratios=[1])
         self.ax0 = self.fig.add_subplot(self.gs[0])
-        self.scat = self.ax0.scatter([], [])
-        self.line = self.ax0.plot([], [], linestyle='-', color='blue')
-        self.forecast_line = self.ax0.plot([], [], linestyle='-', marker='o', color='grey')
+        self.scat = self.ax0.scatter([], [], color='black', label="GDP")
+        self.line = self.ax0.plot([], [], linestyle='-', color='blue', label="GDP_MA")
+        self.forecast_line = self.ax0.plot([], [], linestyle='-', marker='o', color='grey', label="forecast")
         self.artists_list = []
+        self.MA: MAModelFMU = MAModelFMU()
 
     def plot_gdp(self, us_gdp_data: pd.DataFrame, title: str = "US GDP Over Time", show: bool = True):
         """Plot raw GDP data."""
@@ -282,13 +283,6 @@ class MAModelTracker:
         ax.set_ylabel("Longitude")
         ax.tick_params(axis='x', rotation=45)
 
-    def update_plot(self, df):
-        """Update animation frame (still uses matplotlib)."""
-        scat = self.ax0.scatter(df['Year'], df['GDP'], color='blue', s=20)
-        line0, = self.ax0.plot(df['Year'], df['GDP'], label="GDP", color='black')
-        line1, = self.ax0.plot(df['Year'], df['GDP_MA'], label="Moving Avg", color='green')
-        self.artists_list.append([scat, line0, line1])
-
     def animate(self, df, output_path):
         """
         Create an animation of the hurricane data.
@@ -299,10 +293,25 @@ class MAModelTracker:
         """
         df['Year'] = pd.to_datetime(df["Year"])
         df = df.sort_values('Year')
-        for frame in range(len(df)):
+        artists_list = []
+        for frame in range(4, len(df)):
             current_df = df.iloc[:frame + 1]
-            self.update_plot(current_df)
-        anim = ArtistAnimation(self.fig, self.artists_list, interval=200, blit=True)
+            scat = self.ax0.scatter(current_df['Year'], current_df['GDP'], color='black', s=20)
+            line0, = self.ax0.plot(current_df['Year'], current_df['GDP_MA'], color='blue')
+            self.MA.fit(current_df["GDP"])
+            nsteps = 5
+            predictions = self.MA.simulate(
+                nsteps=nsteps,
+                start_time=current_df["GDP"].index[-1],
+                start_obs=current_df["GDP"].iloc[-1]
+            )
+            start_forecast = current_df["Year"].iloc[-1]
+            pred_index = [start_forecast + pd.DateOffset(years=i) for i in range(1, nsteps + 1)]
+            pred_series = pd.Series(predictions, index=pred_index)
+            line1, = self.ax0.plot(pred_series.index, pred_series.values, color='blue')
+            artists_list.append([scat, line0, line1])
+        self.ax0.legend()
+        anim = ArtistAnimation(self.fig, artists_list, interval=200, blit=True)
         anim.save(output_path)
 
     def plot(self, df, output_path):
@@ -337,5 +346,5 @@ def test_demo():
         center=True
     ).mean().ffill().bfill().interpolate()
     tracker = MAModelTracker()
-    tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
+    # tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
     tracker.animate(df.head(10), f"{path_to_data}/output/ma_model_tracker.gif")
