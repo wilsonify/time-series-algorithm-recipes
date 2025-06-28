@@ -240,98 +240,55 @@ class MAModelTracker:
         if show: plt.show()
 
     def plot_predictions_ma_model(self, model_ma: MAModelFMU, series: pd.Series, ax, nsteps: int = 5):
-        """
-        Plot predictions at the end of the actual series.
-
-        Parameters:
-            model_ma: A fitted MAModelFMU instance.
-            series: The actual data as a Series.
-            nsteps: Number of steps to simulate into the future.
-            show: Whether to immediately show the plot.
-        """
-        mvg_avg = series.rolling(
-            window=model_ma.window,
-            min_periods=1,
-            center=True
-        ).mean().ffill().bfill().interpolate()
-
+        """Forecast overlay using seaborn."""
         predictions = model_ma.simulate(
             nsteps=nsteps,
             start_time=series.index[-1],
             start_obs=series.iloc[-1]
         )
-        predictions_index = list(range(len(series.index), len(series.index) + nsteps))
-        predictions_series = pd.Series(predictions, index=predictions_index)
-        sns.lineplot(
-            x=predictions_series.index,
-            y=predictions_series.values,
-            label="Predicted",
-            ax=ax
-        )
-        plt.axvline(len(series) - 1, color='gray', linestyle=':', label='Forecast Start')
-        plt.title("Forecast at End of Series")
-        plt.xlabel("Year")
-        plt.ylabel("GDP")
-        plt.legend()
+        pred_index = list(range(len(series), len(series) + nsteps))
+        pred_series = pd.Series(predictions, index=pred_index)
+
+        sns.lineplot(x=series.index, y=series.values, ax=ax, label="Actual")
+        sns.lineplot(x=pred_series.index, y=pred_series.values, ax=ax, label="Predicted", linestyle="--")
+
+        ax.axvline(x=len(series) - 1, color='gray', linestyle=':', label='Forecast Start')
+        ax.set_title("Forecast at End of Series")
+        ax.set_xlabel("Index")
+        ax.set_ylabel("Value")
+        ax.legend()
 
     def plot_actuals(self, df, ax):
-        """
-        Plot latitude vs longitude.
-
-        Parameters:
-        df (pd.DataFrame): The DataFrame containing hurricane data.
-        ax (matplotlib.axes.Axes): The Axes object to plot on.
-        """
-        ax.scatter(df['Year'], df['GDP'])
-        ax.plot(df['Year'], df['GDP'], linestyle='-', color='blue')
+        """Plot GDP over time using seaborn."""
+        sns.lineplot(x='Year', y='GDP', data=df, ax=ax, label="GDP")
+        sns.scatterplot(x='Year', y='GDP', data=df, ax=ax, color='blue', s=20)
         ax.set_title("GDP over Time")
         ax.set_xlabel("Year")
         ax.set_ylabel("GDP")
 
     def plot_moving_average(self, df, ax):
-        """
-        Plot latitude vs time.
-
-        Parameters:
-        df (pd.DataFrame): The DataFrame containing hurricane data.
-        ax (matplotlib.axes.Axes): The Axes object to plot on.
-        """
-        ax.plot(df['Year'].values, df["GDP"].rolling(
-            window=5,
-            min_periods=1,
-            center=True
-        ).mean().ffill().bfill().interpolate().values, linestyle='-', marker='o', color='green')
-        ax.set_title("GDP vs Time")
-        ax.set_xlabel("Time")
+        """Overlay moving average using seaborn."""
+        sns.lineplot(x='Year', y='GDP_MA', data=df, ax=ax, label="Moving Avg", color='green', marker='o')
+        ax.set_title("GDP with Moving Average")
+        ax.set_xlabel("Year")
         ax.set_ylabel("GDP")
         ax.tick_params(axis='x', rotation=45)
 
     def plot_forecast(self, df, ax):
-        """
-        Plot longitude vs time.
-
-        Parameters:
-        df (pd.DataFrame): The DataFrame containing hurricane data.
-        ax (matplotlib.axes.Axes): The Axes object to plot on.
-        """
-        ax.plot(df['timestamp'], df['Longitude_float'], linestyle='-', marker='o', color='red')
+        """Plot longitude vs time using seaborn."""
+        sns.lineplot(x='timestamp', y='Longitude_float', data=df, ax=ax, marker='o', color='red', label="Forecast")
         ax.set_title("Longitude vs Time")
         ax.set_xlabel("Time")
         ax.set_ylabel("Longitude")
         ax.tick_params(axis='x', rotation=45)
 
     def update_plot(self, df):
-        """
-        Update the plot with new data.
-
-        Parameters:
-        df (pd.DataFrame): The DataFrame containing the current frame of hurricane data.
-        """
-        self.scat = self.ax0.scatter(df['Longitude_float'], df['Latitude_float'])
+        """Update animation frame (still uses matplotlib)."""
+        self.scat = sns.scatterplot(
+            x='Year', y='GDP', data=df, ax=self.ax0, color='blue', s=30
+        ).collections[0]
         self.line, = self.ax0.plot(df['Longitude_float'], df['Latitude_float'], linestyle='-', color='blue')
-        self.lat_line, = self.ax1.plot(df['timestamp'], df['Latitude_float'], linestyle='-', marker='o', color='green')
-        self.lon_line, = self.ax2.plot(df['timestamp'], df['Longitude_float'], linestyle='-', marker='o', color='red')
-        self.artists_list.append([self.scat, self.line, self.lat_line, self.lon_line])
+        self.artists_list.append([self.scat, self.line])
 
     def animate(self, df, output_path):
         """
@@ -375,5 +332,10 @@ class MAModelTracker:
 
 def test_demo():
     df = read_us_gdp_data(f"{path_to_data}/input/gdpus.csv")
+    df['GDP_MA'] = df["GDP"].rolling(
+        window=5,
+        min_periods=1,
+        center=True
+    ).mean().ffill().bfill().interpolate()
     tracker = MAModelTracker()
     tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
