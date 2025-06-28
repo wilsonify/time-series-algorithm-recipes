@@ -3,13 +3,22 @@ from collections import deque
 from pathlib import Path
 from typing import List
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from matplotlib import pyplot as plt
+from matplotlib.animation import ArtistAnimation
+from matplotlib.gridspec import GridSpec
 from statsmodels.tsa.ar_model import AutoReg
 
 from c01_getting_started import path_to_data
+
+
+def read_us_gdp_data(filepath_or_buffer: str) -> pd.DataFrame:
+    """Load GDP data and assign a time index."""
+    us_gdp_data = pd.read_csv(filepath_or_buffer)
+    us_gdp_data['TimeIndex'] = pd.date_range(start='1929', periods=len(us_gdp_data), freq='A')
+    return us_gdp_data
 
 
 class MAModelFMU:
@@ -170,107 +179,201 @@ class MAModelFMU:
         self.lags = model_data["lags"]
 
 
-# === Plotting & Utilities === #
+class MAModelTracker:
+    def __init__(self):
+        """
+        Initialize the HurricaneTracker with a DataFrame.
 
-def plot_gdp(us_gdp_data: pd.DataFrame, title: str = "US GDP Over Time", show: bool = True):
-    """Plot raw GDP data."""
-    plt.figure(figsize=(10, 4))
-    sns.lineplot(
-        x="TimeIndex",
-        y="GDP",
-        data=us_gdp_data,
-        label="US GDP"
-    )
-    plt.title(title)
-    plt.xlabel("Year")
-    plt.ylabel("GDP")
-    plt.legend(loc='best')
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing hurricane data.
+        """
+        self.fig = plt.figure(figsize=(15, 10))
+        self.gs = GridSpec(1, 1, height_ratios=[1])
+        self.ax0 = self.fig.add_subplot(self.gs[0])
+        self.scat = self.ax0.scatter([], [])
+        self.line = self.ax0.plot([], [], linestyle='-', color='blue')
+        self.forecast_line = self.ax0.plot([], [], linestyle='-', marker='o', color='grey')
+        self.artists_list = []
 
-    if show:
-        plt.show()
+    def plot_gdp(self, us_gdp_data: pd.DataFrame, title: str = "US GDP Over Time", show: bool = True):
+        """Plot raw GDP data."""
+        plt.figure(figsize=(10, 4))
+        sns.lineplot(
+            x="TimeIndex",
+            y="GDP",
+            data=us_gdp_data,
+            label="US GDP"
+        )
+        plt.title(title)
+        plt.xlabel("Year")
+        plt.ylabel("GDP")
+        plt.legend(loc='best')
+
+        if show:
+            plt.show()
+
+    def plot_gdp_ma(self, us_gdp_data: pd.DataFrame, window: int = 5, show: bool = True):
+        """Plot GDP with moving average overlay."""
+        mvg_avg = us_gdp_data["GDP"].rolling(
+            window=window,
+            min_periods=1,
+            center=True
+        ).mean().ffill().bfill().interpolate()
+        us_gdp_data["mvg_avg"] = mvg_avg
+        plt.figure(figsize=(10, 4))
+        sns.lineplot(
+            x="TimeIndex",
+            y="GDP",
+            data=us_gdp_data,
+            label="US GDP"
+        )
+        sns.lineplot(
+            x="TimeIndex",
+            y="mvg_avg",
+            data=us_gdp_data,
+            label="US GDP mvg_avg"
+        )
+        plt.title(f"US GDP with MA({window})")
+        plt.xlabel("Year")
+        plt.ylabel("GDP")
+        plt.legend(loc='best')
+        if show: plt.show()
+
+    def plot_predictions_ma_model(self, model_ma: MAModelFMU, series: pd.Series, ax, nsteps: int = 5):
+        """
+        Plot predictions at the end of the actual series.
+
+        Parameters:
+            model_ma: A fitted MAModelFMU instance.
+            series: The actual data as a Series.
+            nsteps: Number of steps to simulate into the future.
+            show: Whether to immediately show the plot.
+        """
+        mvg_avg = series.rolling(
+            window=model_ma.window,
+            min_periods=1,
+            center=True
+        ).mean().ffill().bfill().interpolate()
+
+        predictions = model_ma.simulate(
+            nsteps=nsteps,
+            start_time=series.index[-1],
+            start_obs=series.iloc[-1]
+        )
+        predictions_index = list(range(len(series.index), len(series.index) + nsteps))
+        predictions_series = pd.Series(predictions, index=predictions_index)
+        sns.lineplot(
+            x=predictions_series.index,
+            y=predictions_series.values,
+            label="Predicted",
+            ax=ax
+        )
+        plt.axvline(len(series) - 1, color='gray', linestyle=':', label='Forecast Start')
+        plt.title("Forecast at End of Series")
+        plt.xlabel("Year")
+        plt.ylabel("GDP")
+        plt.legend()
+
+    def plot_actuals(self, df, ax):
+        """
+        Plot latitude vs longitude.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing hurricane data.
+        ax (matplotlib.axes.Axes): The Axes object to plot on.
+        """
+        ax.scatter(df['Year'], df['GDP'])
+        ax.plot(df['Year'], df['GDP'], linestyle='-', color='blue')
+        ax.set_title("GDP over Time")
+        ax.set_xlabel("Year")
+        ax.set_ylabel("GDP")
+
+    def plot_moving_average(self, df, ax):
+        """
+        Plot latitude vs time.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing hurricane data.
+        ax (matplotlib.axes.Axes): The Axes object to plot on.
+        """
+        ax.plot(df['Year'].values, df["GDP"].rolling(
+            window=5,
+            min_periods=1,
+            center=True
+        ).mean().ffill().bfill().interpolate().values, linestyle='-', marker='o', color='green')
+        ax.set_title("GDP vs Time")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("GDP")
+        ax.tick_params(axis='x', rotation=45)
+
+    def plot_forecast(self, df, ax):
+        """
+        Plot longitude vs time.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing hurricane data.
+        ax (matplotlib.axes.Axes): The Axes object to plot on.
+        """
+        ax.plot(df['timestamp'], df['Longitude_float'], linestyle='-', marker='o', color='red')
+        ax.set_title("Longitude vs Time")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Longitude")
+        ax.tick_params(axis='x', rotation=45)
+
+    def update_plot(self, df):
+        """
+        Update the plot with new data.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing the current frame of hurricane data.
+        """
+        self.scat = self.ax0.scatter(df['Longitude_float'], df['Latitude_float'])
+        self.line, = self.ax0.plot(df['Longitude_float'], df['Latitude_float'], linestyle='-', color='blue')
+        self.lat_line, = self.ax1.plot(df['timestamp'], df['Latitude_float'], linestyle='-', marker='o', color='green')
+        self.lon_line, = self.ax2.plot(df['timestamp'], df['Longitude_float'], linestyle='-', marker='o', color='red')
+        self.artists_list.append([self.scat, self.line, self.lat_line, self.lon_line])
+
+    def animate(self, df, output_path):
+        """
+        Create an animation of the hurricane data.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing hurricane data.
+        output_path (str): The path to save the animation.
+        """
+        df['timestamp'] = pd.to_datetime(df["timestamp"])
+        df = df.sort_values('timestamp')
+        for frame in range(len(df)):
+            current_df = df.iloc[:frame + 1]
+            self.update_plot(current_df)
+        anim = ArtistAnimation(self.fig, self.artists_list, interval=200, blit=True)
+        anim.save(output_path)
+
+    def plot(self, df, output_path):
+        """
+        Create static plots of the hurricane data.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing hurricane data.
+        output_path (str): The path to save the plot.
+        """
+        df['Year'] = pd.to_datetime(df["Year"])
+        df = df.sort_values('Year')
+        self.plot_actuals(df, self.ax0)
+        self.plot_moving_average(df, self.ax0)
+        model_ma = MAModelFMU()
+        model_ma.fit(df["GDP"])
+        self.plot_predictions_ma_model(
+            model_ma=model_ma,
+            series=df["GDP"],
+            ax=self.ax0,
+            nsteps=5,
+        )
+        self.fig.tight_layout()
+        plt.savefig(output_path)
 
 
-def plot_gdp_ma(us_gdp_data: pd.DataFrame, window: int = 5, show: bool = True):
-    """Plot GDP with moving average overlay."""
-    mvg_avg = us_gdp_data["GDP"].rolling(
-        window=window,
-        min_periods=1,
-        center=True
-    ).mean().ffill().bfill().interpolate()
-    us_gdp_data["mvg_avg"] = mvg_avg
-    plt.figure(figsize=(10, 4))
-    sns.lineplot(
-        x="TimeIndex",
-        y="GDP",
-        data=us_gdp_data,
-        label="US GDP"
-    )
-    sns.lineplot(
-        x="TimeIndex",
-        y="mvg_avg",
-        data=us_gdp_data,
-        label="US GDP mvg_avg"
-    )
-    plt.title(f"US GDP with MA({window})")
-    plt.xlabel("Year")
-    plt.ylabel("GDP")
-    plt.legend(loc='best')
-    if show: plt.show()
-
-
-def read_us_gdp_data(filepath_or_buffer: str) -> pd.DataFrame:
-    """Load GDP data and assign a time index."""
-    us_gdp_data = pd.read_csv(filepath_or_buffer)
-    us_gdp_data['TimeIndex'] = pd.date_range(start='1929', periods=len(us_gdp_data), freq='A')
-    return us_gdp_data
-
-
-def plot_predictions_ma_model(model_ma: MAModelFMU, series: pd.Series, nsteps: int = 5, show=True):
-    """
-    Plot predictions at the end of the actual series.
-
-    Parameters:
-        model_ma: A fitted MAModelFMU instance.
-        series: The actual data as a Series.
-        nsteps: Number of steps to simulate into the future.
-        show: Whether to immediately show the plot.
-    """
-    mvg_avg = series.rolling(
-        window=model_ma.window,
-        min_periods=1,
-        center=True
-    ).mean().ffill().bfill().interpolate()
-
-    predictions = model_ma.simulate(
-        nsteps=nsteps,
-        start_time=series.index[-1],
-        start_obs=series.iloc[-1]
-    )
-    predictions_index = list(range(len(series.index), len(series.index) + nsteps))
-    predictions_series = pd.Series(predictions, index=predictions_index)
-
-    # Extend x-axis with future indices
-    plt.figure(figsize=(10, 4))
-    sns.lineplot(
-        x=series.index,
-        y=series.values,
-        label="Actual"
-    )
-    sns.lineplot(
-        x=mvg_avg.index,
-        y=mvg_avg.values,
-        label="mvg_avg"
-    )
-    sns.lineplot(
-        x=predictions_series.index,
-        y=predictions_series.values,
-        label="Predicted"
-    )
-    plt.axvline(len(series) - 1, color='gray', linestyle=':', label='Forecast Start')
-    plt.title("Forecast at End of Series")
-    plt.xlabel("Time Step")
-    plt.ylabel("Value")
-    plt.legend()
-    if show: plt.show()
-
-
+def test_demo():
+    df = read_us_gdp_data(f"{path_to_data}/input/gdpus.csv")
+    tracker = MAModelTracker()
+    tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
