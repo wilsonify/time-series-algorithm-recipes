@@ -1,5 +1,4 @@
 import json
-import json
 import logging
 from collections import deque
 from logging.config import dictConfig
@@ -12,12 +11,18 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.animation import ArtistAnimation
 from matplotlib.gridspec import GridSpec
+from sklearn.metrics import root_mean_squared_error
 from statsmodels.tsa.ar_model import AutoReg
-from tsar import LOGGING_CONFIG
 
-from c01_getting_started import path_to_data
-from c02_statistical_univariate_modeling import default_serializer, _looks_like_datetime, default_deserializer, \
-    timestamp_to_float_year, moving_average_centered_filled
+from tsar import LOGGING_CONFIG
+from tsar.c01_getting_started import path_to_data
+from tsar.c02_statistical_univariate_modeling import (
+    default_serializer,
+    _looks_like_datetime,
+    default_deserializer,
+    timestamp_to_float_year,
+    moving_average_centered_filled, float_year_to_datetime
+)
 
 
 class MAModelFMU:
@@ -31,9 +36,10 @@ class MAModelFMU:
         self.initial_obs: float = 0
         self.last_obs: float = 0
         self.history: deque = deque([0, 0])
+        self.initial_history: deque = deque([0, 0])
         self.current_time: float = 0
         self.initialized: bool = False
-        self.params: List[float] = [0]
+        self.params: List[float] = [0, 0, 0]
         self.lags: int = -1
         self.start_year: float = 1970.0
 
@@ -46,13 +52,16 @@ class MAModelFMU:
         assert window > 0, "Window size must be positive."
         assert len(obs) > 2, f"Need at least 1 observations."
         mvg_avg = moving_average_centered_filled(obs, window=window)
-        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='ct').fit()
+        model = AutoReg(endog=obs, exog=mvg_avg, lags=0, trend='c').fit()
+        self.params[0] = model.params.tolist()[0]
+        self.params[1] = 0
+        self.params[2] = model.params.tolist()[1]
         print(model.summary())
 
         # Save model state
-        self.params = model.params.tolist()
         self.window = window
         self.history = deque(list(obs), maxlen=window)
+        self.initial_history = deque(list(obs), maxlen=window)
         self.initial_obs = self.history[0]
         self.last_obs = self.history[-1]
         self.lags = 0
@@ -75,39 +84,36 @@ class MAModelFMU:
         print(f"Initial Observations  : {self.initial_obs}")
         print(f"Current Time Step     : {self.current_time}")
 
-    def update(self, values: List[float], alpha: float = 0.1, lambda_reg: float = 1.0):
+    def update(self, values: List[float], step_size: float = 0.1, lambda_reg: float = 1.0):
         """
         Append new observation and take a small L2-regularized gradient step toward MLE estimate.
 
         Parameters:
             values : List[float]
                 The new observations.
-            alpha : float
+            step_size : float
                 Step size (learning rate) toward new optimal parameters.
             lambda_reg : float
                 L2 regularization strength.
         """
-        assert self.initialized, "Model must be initialized using `create` or `fit`."
+
         self.history.extend(values)
         self.last_obs = self.history[-1]
         # construct features (X matrix)
         y = np.array(list(self.history))
         n = len(y)
         t = np.arange(n)
-        mvg_avg = pd.Series(y).rolling(
-            window=self.window,
-            min_periods=1,
-            center=True
-        ).mean().ffill().bfill().to_numpy()
+        mvg_avg = np.array(moving_average_centered_filled(list(y), window=self.window))
         x_mat = np.column_stack([np.ones(n), mvg_avg, t])
 
         # Ridge Regression: (XᵀX + λI)β = Xᵀy
         identity = np.eye(x_mat.shape[1])
         beta_opt = np.linalg.inv(x_mat.T @ x_mat + lambda_reg * identity) @ x_mat.T @ y
+        print(f"beta_opt={beta_opt}")
 
         # Move params slightly toward regularized estimate
         self.params = [
-            (1 - alpha) * p_old + alpha * p_new
+            (1 - step_size) * p_old + step_size * p_new
             for p_old, p_new in zip(self.params, beta_opt)
         ]
 
@@ -119,7 +125,6 @@ class MAModelFMU:
         Uses self.current_time as a float year (e.g., 2005.0).
         Returns predicted value and advances time.
         """
-        assert self.initialized, "Model must be initialized using `create` or `fit`."
 
         t = float(self.current_time) - self.start_year
         mvg_avg = np.mean(self.history)
@@ -128,6 +133,7 @@ class MAModelFMU:
         logging.debug(f"mvg_avg={mvg_avg}")
         logging.debug(f"yhat={yhat}")
         self.current_time += 1.0  # advance by one year
+        self.history.append(yhat)
         return float(yhat)
 
     def simulate(self, nsteps: int = 10, start_time: float = None, start_obs: float = None) -> pd.Series:
@@ -135,6 +141,8 @@ class MAModelFMU:
         Simulate forward `nsteps` using the model. Returns a time-indexed Series.
 
         Parameters:
+            nsteps: int
+                number of time steps to simulate
             start_time : float
                 Float year to start from (e.g., 2005.0).
             start_obs : float
@@ -143,8 +151,7 @@ class MAModelFMU:
         Returns:
             pd.Series: Forecast values indexed by datetime.
         """
-        assert self.initialized, "Model must be initialized using `create` or `fit`."
-
+        self.reset()
         # Override state if needed
         if start_time is not None:
             self.current_time = float(start_time)
@@ -159,8 +166,7 @@ class MAModelFMU:
             predictions[i] = self.do_step()
 
         # Convert float years → datetime index
-        datetime_index = pd.to_datetime([f"{int(t)}-01-01" for t in float_times]) + \
-                         pd.to_timedelta([(t % 1) * 365.25 for t in float_times], unit="D")
+        datetime_index = [float_year_to_datetime(t) for t in float_times]
 
         return pd.Series(predictions, index=datetime_index)
 
@@ -168,6 +174,7 @@ class MAModelFMU:
         """Reset the model to its original state."""
         assert self.initialized, "Model must be initialized using `create` or `fit`."
         self.current_time = 0
+        self.history = self.initial_history
         self.last_obs = self.initial_obs
 
     def save(self, filepath: str):
@@ -209,17 +216,23 @@ class MAModelTracker:
         df (pd.DataFrame): The DataFrame containing hurricane data.
         """
         self.fig = plt.figure(figsize=(15, 10))
-        self.gs = GridSpec(2, 1, height_ratios=[1, 1])
+        self.gs = GridSpec(3, 1, height_ratios=[1, 1, 1])
         self.ax0 = self.fig.add_subplot(self.gs[0])
         self.ax1 = self.fig.add_subplot(self.gs[1])
+        self.ax2 = self.fig.add_subplot(self.gs[2])
         self.ax0.scatter([], [], color='black', label="GDP")
         self.ax0.plot([], [], linestyle='-', color='blue', label="GDP_MA")
         self.ax0.plot([], [], linestyle='-', marker='o', color='grey', label="forecast")
         self.ax1.scatter([], [], color='red', label="constant")
         self.ax1.scatter([], [], color='green', label="trend")
         self.ax1.scatter([], [], color='blue', label="x1")
+        self.ax2.scatter([], [], color='black', label="rmse")
         self.ax0.set_xlabel("Year")
         self.ax0.set_ylabel("GDP")
+        self.ax1.set_xlabel("Year")
+        self.ax1.set_ylabel("coefficients")
+        self.ax2.set_xlabel("Year")
+        self.ax2.set_ylabel("score")
         self.artists_list = []
         if ma_model is None:
             self.MA: MAModelFMU = MAModelFMU()
@@ -313,43 +326,49 @@ class MAModelTracker:
 
     def animate(self, df, output_path):
         """
-        Create an animation of the hurricane data.
+        Create an animation of the data.
 
         Parameters:
-        df (pd.DataFrame): The DataFrame containing hurricane data.
+        df (pd.DataFrame): The DataFrame containing data.
         output_path (str): The path to save the animation.
         """
-        self.MA.fit(df.head(5)["GDP"])
-        coef_dict = {"year": [], "const": [], "trend": [], "x1": []}
+        self.MA.fit(df.head(20)["GDP"])
+        coef_dict = {"year": [], "const": [], "trend": [], "x1": [], "score": []}
         artists_list = []
-        for frame in range(4, len(df)):
+
+        for frame in range(6, len(df)):
             current_df = df.iloc[:frame + 1]
             current_dp = current_df.tail(1)
-            # self.MA.update(current_df["GDP"].tolist())
-            self.MA.fit(current_df["GDP"])
-
-            # Store coefficients
+            nsteps = 5
+            evaluations = self.MA.simulate(
+                nsteps=nsteps,
+                start_time=current_df.iloc[-nsteps]["Year"],
+                start_obs=current_df.iloc[-nsteps]["GDP"]
+            )
+            score = root_mean_squared_error(evaluations, current_df["GDP"].tail(nsteps))
+            self.MA.fit(current_df.tail(100)["GDP"])
+            predictions = self.MA.simulate(
+                nsteps=nsteps,
+                start_time=current_df.iloc[-1]["Year"],
+                start_obs=current_df.iloc[-1]["GDP"]
+            )
             coef_dict["year"].append(current_dp.index[-1])
             coef_dict["const"].append(self.MA.params[0])
             coef_dict["trend"].append(self.MA.params[1])
             coef_dict["x1"].append(self.MA.params[2])
+            coef_dict["score"].append(score)
 
-            nsteps = 5
-            predictions = self.MA.simulate(
-                nsteps=nsteps,
-                start_time=timestamp_to_float_year(current_dp["GDP"].index[-1]),
-                start_obs=float(current_dp["GDP"].iloc[-1])
-            )
             scat = self.ax0.scatter(current_df.index, current_df['GDP'], color='black')
             line0, = self.ax0.plot(current_df.index, current_df['GDP_MA'], color='blue')
-            line1, = self.ax0.plot([current_dp.index + pd.DateOffset(years=i) for i in range(0, nsteps)],
-                                   predictions, color='blue')
-
+            line1a, = self.ax0.plot(evaluations.index, evaluations, color='orange')
+            line1b, = self.ax0.plot(predictions.index, predictions, color='blue')
             line2, = self.ax1.plot(coef_dict["year"], coef_dict["const"], color='red')
             line3, = self.ax1.plot(coef_dict["year"], coef_dict["trend"], color='green')
             line4, = self.ax1.plot(coef_dict["year"], coef_dict["x1"], color='blue')
 
-            artists_list.append([scat, line0, line1, line2, line3, line4])
+            line5, = self.ax2.plot(coef_dict["year"], coef_dict["score"], color='black')
+
+            artists_list.append([scat, line0, line1a, line1b, line2, line3, line4, line5])
         self.ax0.legend()
         self.ax1.legend()
 
@@ -399,11 +418,7 @@ def read_us_gdp_data(filepath_or_buffer: str) -> pd.DataFrame:
 
     # Step 4: Assign Year back and recompute GDP_MA
     df_regularized["Year"] = df_regularized.index.year
-    df_regularized["GDP_MA"] = df_regularized["GDP"].rolling(
-        window=5,
-        min_periods=1,
-        center=True
-    ).mean().ffill().bfill()
+    df_regularized["GDP_MA"] = moving_average_centered_filled(df_regularized["GDP"].tolist(), window=5)
 
     return df_regularized
 
@@ -413,4 +428,4 @@ def test_demo():
     df = read_us_gdp_data(f"{path_to_data}/input/gdpus.csv")
     tracker = MAModelTracker()
     # tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
-    tracker.animate(df.head(25), f"{path_to_data}/output/ma_model_tracker.gif")
+    tracker.animate(df, f"{path_to_data}/output/ma_model_tracker.gif")
