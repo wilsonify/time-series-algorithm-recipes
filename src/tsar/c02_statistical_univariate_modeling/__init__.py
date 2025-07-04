@@ -2,11 +2,9 @@ from collections import deque
 from typing import List
 
 import numpy as np
+import pandas as pd
 from dateutil.parser import parse
-import pandas as pd
-from collections import deque
-import pandas as pd
-import json
+
 
 def default_serializer(obj):
     """Handle non-serializable objects like deque or pandas.Timestamp."""
@@ -19,13 +17,13 @@ def default_serializer(obj):
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
-
 def default_deserializer(obj):
     """Reconstruct known types from saved JSON structure."""
     # Handle pandas DateOffset
     if isinstance(obj, dict) and obj.get("_date_offset"):
         return pd.DateOffset(**obj["kwds"])
     return obj
+
 
 def _looks_like_datetime(s):
     try:
@@ -44,11 +42,33 @@ def timestamp_to_float_year(ts: pd.Timestamp) -> float:
     return year + (day_of_year - 1 + fraction_of_day) / days_in_year
 
 
+def timestamp_to_float_day(ts: pd.Timestamp, reference: pd.Timestamp = pd.Timestamp("1970-01-01")) -> float:
+    """
+    Convert a timestamp to a float where 1.0 = 1 day since a reference timestamp.
+    """
+    delta = ts - reference
+    return delta.total_seconds() / 86400.0  # 1 day = 86400 seconds
+
+
 def float_year_to_datetime(t: float) -> pd.Timestamp:
     """Convert float year (e.g., 2002.5) to pandas Timestamp."""
     year = int(t)
     remainder = t - year
     return pd.to_datetime(f"{year}-01-01") + pd.to_timedelta(remainder * 365.25, unit="D")
+
+
+def float_day_to_datetime(float_days: float, reference: pd.Timestamp = pd.Timestamp("1970-01-01")) -> pd.Timestamp:
+    """
+    Convert float-based day offset back to a pd.Timestamp.
+
+    Parameters:
+    - float_days: Number of days since reference.
+    - reference: The origin timestamp.
+
+    Returns:
+    - pd.Timestamp corresponding to reference + float_days.
+    """
+    return reference + pd.to_timedelta(float_days, unit="D")
 
 
 def moving_average_centered_filled(data: List[float], window: int) -> List[float]:
