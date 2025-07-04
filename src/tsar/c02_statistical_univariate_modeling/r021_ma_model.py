@@ -1,7 +1,6 @@
 import json
 import logging
 from collections import deque
-from logging.config import dictConfig
 from pathlib import Path
 from typing import List
 
@@ -14,8 +13,6 @@ from matplotlib.gridspec import GridSpec
 from sklearn.metrics import root_mean_squared_error
 from statsmodels.tsa.ar_model import AutoReg
 
-from tsar import LOGGING_CONFIG
-from tsar.c01_getting_started import path_to_data
 from tsar.c02_statistical_univariate_modeling import (
     default_serializer,
     _looks_like_datetime,
@@ -281,7 +278,7 @@ class MAModelTracker:
         plt.legend(loc='best')
         if show: plt.show()
 
-    def plot_predictions_ma_model(self, model_ma: MAModelFMU, series: pd.Series, ax, nsteps: int = 5):
+    def plot_predictions_ma_model(self, model_ma: MAModelFMU, series: pd.Series, ax, nsteps: int = 5, show=True):
         """Forecast overlay using seaborn."""
         predictions = model_ma.simulate(
             nsteps=nsteps,
@@ -346,7 +343,8 @@ class MAModelTracker:
                 start_obs=current_df.iloc[-nsteps]["GDP"]
             )
             score = root_mean_squared_error(evaluations, current_df["GDP"].tail(nsteps))
-            self.MA.fit(current_df.tail(100)["GDP"])
+            if len(current_df > 20):
+                self.MA.fit(current_df.tail(100)["GDP"])
             predictions = self.MA.simulate(
                 nsteps=nsteps,
                 start_time=current_df.iloc[-1]["Year"],
@@ -421,11 +419,3 @@ def read_us_gdp_data(filepath_or_buffer: str) -> pd.DataFrame:
     df_regularized["GDP_MA"] = moving_average_centered_filled(df_regularized["GDP"].tolist(), window=5)
 
     return df_regularized
-
-
-def test_demo():
-    dictConfig(LOGGING_CONFIG)
-    df = read_us_gdp_data(f"{path_to_data}/input/gdpus.csv")
-    tracker = MAModelTracker()
-    # tracker.plot(df, f"{path_to_data}/output/ma_model_tracker.png")
-    tracker.animate(df, f"{path_to_data}/output/ma_model_tracker.gif")
